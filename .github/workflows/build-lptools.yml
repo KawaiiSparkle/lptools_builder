@@ -1,0 +1,114 @@
+# Build AOSP logical-partition (super.img) host tools: lpmake / lpdump /
+# lpunpack / lpadd / lpflash.
+#
+# Approach: **minimal checkout + official `mmm`**.
+#   - `repo init` a full AOSP manifest (a few MB of metadata, no source).
+#   - `repo sync` ONLY the projects listed in `required-projects.txt`
+#     (~20-25GB instead of ~60GB for a full tree).
+#   - Build with the official Soong `mmm`, so the binaries are bit-exact with
+#     the chosen AOSP revision and automatically absorb any liblp/libsparse
+#     API or LP-metadata changes — no vendored code that can drift.
+#
+# Manual trigger: Actions -> "Build LP partition tools" -> Run workflow.
+# Optionally also runs monthly to track AOSP.
+#
+# Disk: ~20-25GB (prebuilts/clang + prebuilts/build-tools alone are ~12GB).
+#   Use a self-hosted runner or a large hosted runner (e.g. ubuntu-latest-16-cores);
+#   the free ubuntu-latest (~14GB) is too small.
+
+name: Build LP partition tools
+
+on:
+  workflow_dispatch:
+    inputs:
+      aosp_ref:
+        description: 'AOSP branch/tag: `main` for latest, or a version tag like `android-15.0.0_r25`'
+        required: true
+        default: 'main'
+  schedule:
+    - cron: '0 0 1 * *'
+
+env:
+  TOOLS: 'lpmake lpdump lpunpack lpadd lpflash'
+
+jobs:
+  build:
+    # Requires ~25GB free disk. Use your self-hosted runner label here, or a
+    # large hosted runner such as `ubuntu-latest-16-cores`.
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 360
+
+    steps:
+      - name: Check free disk
+        run: |
+          df -h /
+          echo "Need ~25GB free for a minimal checkout + build output."
+
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git git-lfs python3 python-is-python3 curl unzip zip gnupg \
+            openjdk-11-jdk flex bison gperf build-essential \
+            libncurses5 libncurses-dev libssl-dev zlib1g-dev \
+            libxml2-utils xmlstarlet rsync
+
+      - name: Install repo tool
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+x "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Init AOSP manifest (metadata only)
+        run: |
+          mkdir -p aosp && cd aosp
+          repo init -u https://android.googlesource.com/platform/manifest \
+            -b "${{ github.event.inputs.aosp_ref || 'main' }}" \
+            --depth=1 --partial-clone --clone-filter=blob:none
+
+      - name: Sync only required projects
+        run: |
+          cd aosp
+          # `required-projects.txt` lives at the repo root of THIS repo
+          # (checked out by actions/checkout above); copy it into the AOSP tree.
+          cp "$GITHUB_WORKSPACE/required-projects.txt" .
+          PROJECTS=$(grep -v '^\s*#' required-projects.txt | grep -v '^\s*$' | tr '\n' ' ')
+          echo "Syncing projects: $PROJECTS"
+          repo sync -c -j"$(nproc)" --no-tags $PROJECTS
+
+      - name: Build partition_tools (Linux host)
+        run: |
+          cd aosp
+          source build/envsetup.sh
+          mmm -j"$(nproc)" system/extras/partition_tools
+          mmm -j"$(nproc)" system/core/libsparse
+
+      - name: Collect Linux binaries
+        run: |
+          mkdir -p dist/linux-x86_64
+          cd aosp
+          for t in $TOOLS; do
+            cp -v "out/host/linux-x86/bin/$t" "$GITHUB_WORKSPACE/dist/linux-x86_64/" || true
+          done
+          # libsparse helpers are handy for sparse<->raw conversion
+          for t in simg2img img2simg; do
+            cp -v "out/host/linux-x86/bin/$t" "$GITHUB_WORKSPACE/dist/linux-x86_64/" || true
+          done
+          cd "$GITHUB_WORKSPACE"
+          ls -lh dist/linux-x86_64
+
+      - name: Package
+        run: |
+          cd dist
+          tar -czf lp-tools-linux-x86_64.tar.gz linux-x86_64
+          ls -lh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lp-tools-${{ github.event.inputs.aosp_ref || 'main' }}
+          path: dist/*.tar.gz
+          if-no-files-found: error

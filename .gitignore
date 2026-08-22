@@ -1,0 +1,9 @@
+# AOSP source tree (checked out by repo sync during local testing)
+/aosp/
+
+# Build outputs
+/out/
+/dist/
+
+# OS noise
+.DS_Store

@@ -1,0 +1,47 @@
+# Minimal AOSP project list required to build the logical-partition host tools
+# (lpmake / lpdump / lpunpack / lpadd / lpflash) via `mmm`.
+#
+# One `platform/...` project per line. `repo sync` only checks out the projects
+# listed here (plus the build-system bootstrap deps below), so the tree stays
+# ~10GB instead of the ~60GB of a full AOSP checkout.
+#
+# If `mmm` reports a missing module (e.g. "module X not found" or a missing
+# include), find the owning project below and append it. Keep this list sorted
+# by layer for readability.
+
+# --- Build system bootstrap (Soong + make + go toolchain) ---
+platform/build
+platform/build/soong
+platform/build/blueprint
+platform/build/bazel
+platform/build/bazel_common_rules
+platform/bionic
+
+# --- Prebuilts (toolchains; these are the bulk of the ~10GB) ---
+platform/prebuilts/build-tools
+platform/prebuilts/clang/host/linux-x86
+platform/prebuilts/go/linux-x86
+platform/prebuilts/misc
+platform/prebuilts/sdk
+
+# --- The tools themselves and their owning repos ---
+platform/system/extras
+platform/system/core
+platform/system/libbase
+platform/system/logging
+
+# --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils ---
+platform/external/protobuf
+platform/external/fmtlib
+platform/external/e2fsprogs
+platform/external/zlib
+platform/external/boringssl
+platform/external/libcxx
+platform/external/libcxxabi
+platform/external/googletest
+platform/external/libpng
+platform/external/sqlite
+platform/external/go-cmp
+platform/external/golang-protobuf
+platform/external/starlark-go
+platform/external/llvm
