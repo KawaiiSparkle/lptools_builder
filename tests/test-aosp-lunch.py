@@ -51,6 +51,7 @@ lunch() {
   [ "$ALLOW_MISSING_DEPENDENCIES" = true ] || return 92
   [ "$(printenv TARGET_BUILD_UNBUNDLED)" = true ] || return 93
   [ "$(printenv ALLOW_MISSING_DEPENDENCIES)" = true ] || return 94
+  [ "$(printenv WITH_DEXPREOPT)" = false ] || return 95
   echo "host-combo:$1"
 }
 lptools_host_lunch
@@ -66,9 +67,11 @@ lptools_host_lunch custom-ap3a-user
     def test_normal_lunch_does_not_force_host_settings(self):
         result = self.run_shell(r'''
 unset TARGET_BUILD_UNBUNDLED ALLOW_MISSING_DEPENDENCIES
+export WITH_DEXPREOPT=true
 lunch() {
   [ -z "${TARGET_BUILD_UNBUNDLED:-}" ] || return 91
   [ -z "${ALLOW_MISSING_DEPENDENCIES:-}" ] || return 92
+  [ "$WITH_DEXPREOPT" = true ] || return 93
 }
 lptools_lunch aosp_arm64
 ''')

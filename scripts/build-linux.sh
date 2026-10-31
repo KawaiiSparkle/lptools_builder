@@ -188,15 +188,22 @@ build_host() {
   # --soong-only installs below OUT_DIR/soong, not ANDROID_HOST_OUT (Make).
   local install_arch="$ARCH" build_out="${OUT_DIR:-out}" host_bin
   [ "$install_arch" != x86_64 ] || install_arch=x86
-  host_bin="$build_out/soong/host/$HOST_OS-$install_arch/bin"
+  local host_goal="$build_out/soong/host/$HOST_OS-$install_arch/bin"
+  host_bin="$host_goal"
   case "$host_bin" in /*) ;; *) host_bin="$WORK/$host_bin" ;; esac
   printf '%s\n' "$host_bin" > "$HOST_BIN_FILE"
 
-  m --soong-only -j"$JOBS" lpmake lpdump lpunpack simg2img img2simg
+  # Module-name phony targets include every variant (including Android lpdump).
+  # Request only the native host installation, preserving relative Ninja paths.
+  local tool goals=()
+  for tool in lpmake lpdump lpunpack simg2img img2simg; do
+    goals+=("$host_goal/$tool")
+  done
+  m --soong-only -j"$JOBS" "${goals[@]}"
   local extra
   for extra in lpadd lpflash; do
     log "building optional $extra"
-    m --soong-only -j"$JOBS" "$extra" || warn "$extra is not available on $REF"
+    m --soong-only -j"$JOBS" "$host_goal/$extra" || warn "$extra is not available on $REF"
   done
 }
 group_start "build (setup + lunch + m -j$JOBS)"

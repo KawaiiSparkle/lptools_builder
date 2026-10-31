@@ -75,7 +75,7 @@ class HostBuildFixture(unittest.TestCase):
             if key.startswith(("GIT_", "LPTOOLS_", "MOCK_")) or key in (
                     "BASH_ENV", "ENV", "AOSP_REF", "JOBS", "OUT", "OUT_DIR",
                     "ANDROID_HOST_OUT", "HOST_CROSS_OS", "HOST_CROSS_ARCH",
-                    "TARGET_BUILD_UNBUNDLED", "ALLOW_MISSING_DEPENDENCIES",
+                    "TARGET_BUILD_UNBUNDLED", "ALLOW_MISSING_DEPENDENCIES", "WITH_DEXPREOPT",
                     "LP_NO_GROUPS", "__LP_LOG_SH", "SOURCE_DATE_EPOCH_ISO"):
                 self.env.pop(key, None)
         self.env.update(GIT_CONFIG_NOSYSTEM="1",
@@ -216,6 +216,7 @@ class HostBuildFixture(unittest.TestCase):
             lunch() {
               [ "${TARGET_BUILD_UNBUNDLED:-}" = true ] || return 93
               [ "${ALLOW_MISSING_DEPENDENCIES:-}" = true ] || return 94
+              [ "${WITH_DEXPREOPT:-}" = false ] || return 91
               printf 'lunch\t%s\t%s\n' "$BASHPID" "$1" >> "$TRACE"
               sleep "${MOCK_LUNCH_DELAY:-0}"
               [ "${MOCK_LUNCH_RC:-0}" = 0 ] || return "$MOCK_LUNCH_RC"
@@ -237,6 +238,7 @@ class HostBuildFixture(unittest.TestCase):
             m() {
               [ "${TARGET_BUILD_UNBUNDLED:-}" = true ] || return 93
               [ "${ALLOW_MISSING_DEPENDENCIES:-}" = true ] || return 94
+              [ "${WITH_DEXPREOPT:-}" = false ] || return 91
               [ "${1:-}" = --soong-only ] || return 95
               shift
               printf 'm\t%s\t%s\t%s\t%s' "$BASHPID" "${HOST_CROSS_OS:-}" "${HOST_CROSS_ARCH:-}" "$PWD" >> "$TRACE"
@@ -268,6 +270,10 @@ class HostBuildFixture(unittest.TestCase):
                 local arch="${MOCK_NATIVE_ARCH:-x86_64}"
                 case "$arch" in x86_64) arch=x86 ;; aarch64) arch=arm64 ;; esac
                 local host_out="$build_out/soong/host/linux-$arch"
+                local goal
+                for goal in "${@:2}"; do
+                  case "$goal" in "$host_out/bin/"*) ;; *) return 92 ;; esac
+                done
                 case "$host_out" in /*) ;; *) host_out="$PWD/$host_out" ;; esac
                 mkdir -p "$host_out/bin" "$host_out/lib64/nested" "$host_out/lib"
                 printf 'fixture runtime\n' > "$host_out/lib64/libfixture.so"
@@ -453,6 +459,12 @@ class LinuxHostBuildTest(HostBuildFixture):
                         self.output.index("fixture setup completed"), self.output)
         manifest = self.assert_package("linux-x86_64")
         self.assertEqual(manifest["host_arch"], "x86_64")
+        host_goal = "custom build artifacts/soong/host/linux-x86/bin/"
+        self.assertEqual(self.rows("m")[0][5:],
+                         [host_goal + tool for tool in
+                          ("lpmake", "lpdump", "lpunpack", "simg2img", "img2simg")])
+        self.assertEqual([row[5:] for row in self.rows("m")[1:]],
+                         [[host_goal + "lpadd"], [host_goal + "lpflash"]])
         expected = self.work / "custom build artifacts/soong/host/linux-x86/bin/lpmake"
         self.assertTrue(expected.is_file(), self.output)
         self.assertEqual((self.out / "lptools-linux-x86_64/bin/lpmake").read_bytes(),

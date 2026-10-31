@@ -37,5 +37,7 @@ lptools_lunch() {
 lptools_host_lunch() {
   export TARGET_BUILD_UNBUNDLED=true
   export ALLOW_MISSING_DEPENDENCIES=true
+  # A host-only tree has no ART dex2oat dependency for device app preoptimization.
+  export WITH_DEXPREOPT=false
   lptools_lunch "${1:-module_arm64}"
 }

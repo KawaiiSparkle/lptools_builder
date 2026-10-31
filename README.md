@@ -244,8 +244,10 @@ Actions → **Build lptools** → Run workflow：
   优先尝试 Android 15 的 `<product>-trunk_staging-eng`，再回退旧版双段式参数。
   显式传入三段式目标时仅尝试该目标，不替换用户指定的 release。
   Linux / Darwin / Windows host 构建默认使用 `module_arm64`，在 `lunch` 前设置
-  `TARGET_BUILD_UNBUNDLED=true` 与 `ALLOW_MISSING_DEPENDENCIES=true`，然后通过
-  `m --soong-only` 编译所需工具，避免完整 GSI 产品对 VNDK 快照和镜像的要求。
+  `TARGET_BUILD_UNBUNDLED=true`、`ALLOW_MISSING_DEPENDENCIES=true` 与
+  `WITH_DEXPREOPT=false`（host 工具不需要设备端 ART / DEX 预优化），然后通过
+  `m --soong-only` 指定 host 安装路径目标，避免模块名目标连带构建 Android 变体，
+  也避免完整 GSI 产品对 VNDK 快照和镜像的要求。
   部分源码树允许无关模块缺失；所请求工具真正依赖的模块缺失仍会使构建失败。
 - **时间戳与颜色**：logger 自己的状态、告警及心跳行默认带 UTC 时间（`LP_TS=0`
   可关闭），底层原始输出不保证每行有时间戳。交互终端或 GitHub Actions 可使用
