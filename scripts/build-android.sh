@@ -32,6 +32,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$ROOT/scripts/aosp-meta.sh"
 # shellcheck source=scripts/log.sh
 . "$ROOT/scripts/log.sh"
+. "$ROOT/scripts/aosp-lunch.sh"
 REF=${AOSP_REF:-android-15.0.0_r1}
 ABIS=${LPTOOLS_ABIS:-arm64,arm}
 WORK=${LPTOOLS_WORK:-$ROOT/aosp}
@@ -108,30 +109,17 @@ BUILDER_BRANCH=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 
 export SOURCE_DATE_EPOCH_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 BUILD_TMP=$(mktemp -d)
-LUNCH_LOG="$BUILD_TMP/lunch.log"
 
 # run_beat isolates this entire function. lunch must run in the same shell as m:
 # it changes the build environment, and both envsetup and lunch can take time.
 build_android() {
-  local product=$1 candidate lunched="" rc=1 product_out
+  local product=$1 lunched product_out
   cd "$WORK" || return $?
   # AOSP's shell helpers are not nounset-safe. This only affects the build child.
   set +u
   source build/envsetup.sh >/dev/null || return $?
-  for candidate in "$product-eng" "$product-trunk_staging-eng"; do
-    if lunch "$candidate" >"$LUNCH_LOG" 2>&1; then
-      lunched=$candidate
-      break
-    else
-      rc=$?
-    fi
-  done
-  if [ -z "$lunched" ]; then
-    tail -20 "$LUNCH_LOG" >&2 || true
-    warn "lunch failed for $product (tried -eng and -trunk_staging-eng)"
-    return "$rc"
-  fi
-  log "lunch $lunched"
+  lptools_lunch "$product" || return $?
+  lunched=$LP_LUNCH_COMBO
   # lunch exports the absolute PRODUCT_OUT as ANDROID_PRODUCT_OUT, including
   # OUT_DIR overrides. get_abs_build_var is no longer public in Android 15.
   product_out=${ANDROID_PRODUCT_OUT:-}

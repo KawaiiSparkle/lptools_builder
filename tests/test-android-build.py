@@ -34,7 +34,7 @@ class AndroidBuildTest(unittest.TestCase):
         scripts = self.root / "fixture" / "scripts"
         scripts.mkdir(parents=True)
         for name in ("build-android.sh", "log.sh", "aosp-meta.sh",
-                     "make-manifest.py"):
+                     "aosp-lunch.sh", "make-manifest.py"):
             shutil.copyfile(ROOT / "scripts" / name, scripts / name)
         self.put("source tree/.repo/manifest.xml",
                  '<manifest><default revision="mock-branch"/></manifest>\n')
@@ -171,11 +171,11 @@ class AndroidBuildTest(unittest.TestCase):
         self.assertEqual(self.trace.count("compile:"), 2, self.trace)
         self.assert_clean()
 
-    def test_modern_lunch_fallback_and_setup_heartbeat(self):
+    def test_modern_lunch_first_and_setup_heartbeat(self):
         self.assertEqual(self.run_build("--abi", "x86_64", MOCK_MODERN=1,
                                        MOCK_SETUP_DELAY=1.2, MOCK_LUNCH_DELAY=1.2),
                          0, self.output)
-        self.assertIn("lunch:aosp_x86_64-eng:", self.trace)
+        self.assertNotIn("lunch:aosp_x86_64-eng:", self.trace)
         self.assertIn("lunch:aosp_x86_64-trunk_staging-eng:", self.trace)
         manifest = json.loads((self.out / "lptools-android-x86_64/manifest.json").read_text())
         self.assertEqual(manifest["build_product"], "aosp_x86_64-trunk_staging-eng")

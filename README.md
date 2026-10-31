@@ -197,7 +197,7 @@ Actions → **Build lptools** → Run workflow：
 | 输入 | 默认 | 说明 |
 |---|---|---|
 | `aosp_ref` | `android-15.0.0_r1` | `platform/manifest` 的 tag 或分支，如 `android-15.0.0_r1`、`android-16.0.0_r2`、`main` |
-| `product` | `aosp_arm64-eng` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
+| `product` | `aosp_arm64` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
 | `android_abis` | `arm64,arm` | Android 实验目标请求的 ABI；还需 `extra_targets` 包含 `android`，留空则跳过该 job |
 | `check_patches` | 否 | 只跑 Windows 补丁检查，跳过所有构建及发布；首次仍需准备环境与同步源码，不应用补丁 |
 | `publish` | 否 | 勾选则创建 / 更新 GitHub Release |
@@ -237,7 +237,9 @@ Actions → **Build lptools** → Run workflow：
 - **阶段分组 + 心跳**：构建脚本共用 `scripts/log.sh`，在 Actions 中按阶段折叠
   `::group::`；`run_beat` 默认每 `15` 秒报告已运行时长，可用 `LP_BEAT_SECONDS`
   调整。构建心跳覆盖 `envsetup + lunch + m`，底层 stdout / stderr 直接透传；
-  `lunch` 输出单独保存，失败时显示尾部。
+  `lunch` 在同一 shell 内逐次执行并实时输出，每次失败均标出目标和退出码；产品名
+  优先尝试 Android 15 的 `<product>-trunk_staging-eng`，再回退旧版双段式参数。
+  显式传入三段式目标时仅尝试该目标，不替换用户指定的 release。
 - **时间戳与颜色**：logger 自己的状态、告警及心跳行默认带 UTC 时间（`LP_TS=0`
   可关闭），底层原始输出不保证每行有时间戳。交互终端或 GitHub Actions 可使用
   ANSI 颜色，设置非空 `NO_COLOR` 或 `TERM=dumb` 时关闭 logger 的颜色；这不会

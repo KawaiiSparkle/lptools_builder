@@ -24,14 +24,20 @@
 platform/build
 platform/build/soong
 platform/build/blueprint
+# Android 15 release-config (including trunk_staging) lives in its own project.
+platform/build/release
 platform/build/bazel
 platform/build/bazel_common_rules
 platform/bionic
 
 # --- Prebuilts (toolchains; these are the bulk of the checkout) ------------
-# jdk17 is REQUIRED: soong_ui (build/soong/ui) needs JAVA_HOME, and AOSP pins
-# its own JDK under prebuilts/jdk. On android-12/13 pin jdk11 instead.
-platform/prebuilts/jdk/jdk17
+# Android 15 soong_ui defaults to the in-tree JDK 21. Older tags need a
+# matching list/toolchain; installing a system JDK does not replace this checkout.
+platform/prebuilts/jdk/jdk21
+# Go bootstrap imports analysis_v2 from this checkout, before module compilation.
+platform/prebuilts/bazel/common
+# Soong host_cross(windows) links against the in-tree MinGW runtime/sysroot.
+platform/prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8
 platform/prebuilts/build-tools
 platform/prebuilts/clang/host/linux-x86
 platform/prebuilts/go/linux-x86

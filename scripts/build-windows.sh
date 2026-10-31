@@ -30,6 +30,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$ROOT/scripts/aosp-meta.sh"
 # shellcheck source=scripts/log.sh
 . "$ROOT/scripts/log.sh"
+. "$ROOT/scripts/aosp-lunch.sh"
 REF=${AOSP_REF:-android-15.0.0_r1}
 PRODUCT=${LPTOOLS_PRODUCT:-}
 WORK=${LPTOOLS_WORK:-$ROOT/aosp}
@@ -42,7 +43,6 @@ KEEP_PATCHES=0
 REVERT_ONLY=0
 CHECK_PATCHES=0
 APPLIED=()
-LUNCH_LOG=""
 COMBO_FILE=""
 HOST_BIN_FILE=""
 finish() {
@@ -52,7 +52,6 @@ finish() {
   if declare -F cleanup >/dev/null 2>&1; then cleanup "$rc" || cleanup_rc=$?; fi
   if [ "$rc" -eq 0 ] && [ "$cleanup_rc" -ne 0 ]; then rc=$cleanup_rc; fi
   lp_finish "$rc"
-  [ -z "$LUNCH_LOG" ] || rm -f "$LUNCH_LOG"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
   exit "$rc"
@@ -230,7 +229,6 @@ group_end
 
 # --- 3. build with the official Soong build --------------------------------
 [ -f "$WORK/build/envsetup.sh" ] || die "no AOSP build/envsetup.sh at $WORK"
-LUNCH_LOG=$(mktemp)
 COMBO_FILE=$(mktemp)
 HOST_BIN_FILE=$(mktemp)
 REQUIRED_EXES="lpmake lpdumps lpunpack"
@@ -240,19 +238,8 @@ build_windows() {
   cd "$WORK"
   set +u
   source build/envsetup.sh
-  local candidate="${PRODUCT:-aosp_arm64-eng}" cand lunched="" rc=1 t
-  for cand in "$candidate" aosp_arm64-eng aosp_arm64-trunk_staging-eng \
-              aosp_x86_64-eng aosp_arm-eng aosp_arm64-userdebug; do
-    log "trying lunch $cand"
-    if lunch "$cand" >"$LUNCH_LOG" 2>&1; then lunched=$cand; break
-    else rc=$?; fi
-  done
-  if [ -z "$lunched" ]; then
-    tail -30 "$LUNCH_LOG" >&2 || true
-    warn "lunch failed for every candidate; pass --product <name>"
-    return "$rc"
-  fi
-  log "lunch $lunched"
+  lptools_lunch "${PRODUCT:-aosp_arm64}" || return $?
+  local lunched="$LP_LUNCH_COMBO" t
   printf '%s\n' "$lunched" > "$COMBO_FILE"
   # OUT_DIR is a build-system setting; lunch may also set a shell variable OUT.
   local build_out="${OUT_DIR:-out}"

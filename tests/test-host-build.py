@@ -82,7 +82,7 @@ class HostBuildFixture(unittest.TestCase):
         scripts = self.root / "fixture/scripts"
         scripts.mkdir(parents=True)
         for name in ("build-linux.sh", "build-windows.sh", "log.sh",
-                     "aosp-meta.sh", "make-manifest.py"):
+                     "aosp-meta.sh", "aosp-lunch.sh", "make-manifest.py"):
             shutil.copyfile(ROOT / "scripts" / name, scripts / name)
         self.put("fixture/required-projects.txt",
                  "# Fixture projects only\nsystem/extras\nsystem/core\nexternal/e2fsprogs\n")
@@ -358,7 +358,7 @@ class HostBuildFixture(unittest.TestCase):
         self.assertEqual({row[0] for row in source + lunches + compiles},
                          {source[0][0]}, self.trace)
 
-    def assert_package(self, platform, product="aosp_arm64-eng"):
+    def assert_package(self, platform, product="aosp_arm64-trunk_staging-eng"):
         bundle_name = "lptools-" + platform
         bundle = self.out / bundle_name
         manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))

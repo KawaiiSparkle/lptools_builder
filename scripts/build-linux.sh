@@ -22,6 +22,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$ROOT/scripts/aosp-meta.sh"
 . "$ROOT/scripts/log.sh"
+. "$ROOT/scripts/aosp-lunch.sh"
 REF=${AOSP_REF:-android-15.0.0_r1}
 PRODUCT=${LPTOOLS_PRODUCT:-}
 WORK=${LPTOOLS_WORK:-$ROOT/aosp}
@@ -31,7 +32,6 @@ SKIP_SYNC=0
 SYNC_ONLY=0
 NO_SMOKE=0
 ARCH_ARG=
-LUNCH_LOG=""
 COMBO_FILE=""
 HOST_BIN_FILE=""
 PROJECTS_FILE=""
@@ -40,7 +40,6 @@ finish() {
   trap - EXIT
   set +e
   lp_finish "$rc"
-  [ -z "$LUNCH_LOG" ] || rm -f "$LUNCH_LOG"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
   [ -z "$PROJECTS_FILE" ] || rm -f "$PROJECTS_FILE"
@@ -174,7 +173,6 @@ fi
 
 # --- 3. build with the official Soong build --------------------------------
 [ -f "$WORK/build/envsetup.sh" ] || die "no AOSP build/envsetup.sh at $WORK"
-LUNCH_LOG=$(mktemp)
 COMBO_FILE=$(mktemp)
 HOST_BIN_FILE=$(mktemp)
 
@@ -184,23 +182,8 @@ build_host() {
   # AOSP's environment scripts expect unset variables to expand to empty.
   set +u
   source build/envsetup.sh
-  local candidate="${PRODUCT:-aosp_arm64-eng}" cand lunched="" rc=1
-  for cand in "$candidate" aosp_arm64-eng aosp_arm64-trunk_staging-eng \
-              aosp_x86_64-eng aosp_arm-eng aosp_arm64-userdebug; do
-    log "trying lunch $cand"
-    if lunch "$cand" >"$LUNCH_LOG" 2>&1; then
-      lunched=$cand
-      break
-    else
-      rc=$?
-    fi
-  done
-  if [ -z "$lunched" ]; then
-    tail -30 "$LUNCH_LOG" >&2 || true
-    warn "lunch failed for every candidate; pass --product <name>"
-    return "$rc"
-  fi
-  log "lunch $lunched"
+  lptools_lunch "${PRODUCT:-aosp_arm64}" || return $?
+  local lunched="$LP_LUNCH_COMBO"
   printf '%s\n' "$lunched" > "$COMBO_FILE"
   [ -n "$ANDROID_HOST_OUT" ] || die "lunch did not export ANDROID_HOST_OUT"
   local host_out="$ANDROID_HOST_OUT"
