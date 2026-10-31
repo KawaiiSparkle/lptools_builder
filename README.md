@@ -78,7 +78,7 @@ workflow 配置的目标矩阵（文件名是预期产物，尚不表示已构�
 `continue-on-error`，Android 的失败结果则由显式 release 门禁排除。Release notes 只
 汇总下载到的清单与资产，**没有 job 失败报告**，失败详情仍需查看 Actions。
 
-**默认手动运行只跑 Linux x86_64 + Windows x86_64**。Linux ARM64 / Darwin / Android
+**推送到 `main` 与默认手动运行只跑 Linux x86_64 + Windows x86_64**，普通分支推送不会发布 Release。Linux ARM64 / Darwin / Android
 默认跳过，可通过 `extra_targets` 选择 `linux-arm64`、`darwin`、`android` 及其组合。Tag push 与每月定时
 任务会尝试全矩阵，但不保证实验目标有产物；定时任务本身不发布。
 

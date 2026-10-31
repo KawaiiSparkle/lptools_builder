@@ -19,7 +19,7 @@
 # Linux swap to 12 GiB. Swap consumes disk and only provides a memory fallback;
 # actual checkout/build space, RAM needs and performance depend on the ref/image.
 #
-# Default cost: a manual run builds linux-x86_64 + windows-x86_64 only.
+# Default cost: main pushes and manual runs build Linux + Windows x86_64 only.
 # Opt into experimental Linux ARM64, Darwin and Android with extra_targets.
 # Tag pushes and the monthly schedule build everything.
 
@@ -65,6 +65,8 @@ on:
           - linux-arm64,android
           - linux-arm64,darwin,android
   push:
+    branches:
+      - main
     tags:
       - "lptools-*"
   schedule:
@@ -79,8 +81,8 @@ permissions:
 # publish runs use separate, per-run groups so another run cannot replace their
 # pending slot or automatically cancel them. Users can still cancel any run.
 concurrency:
-  group: lptools-${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.publish) && format('publish-{0}', github.run_id) || 'build' }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish }}
+  group: lptools-${{ github.workflow }}-${{ github.ref }}-${{ ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || inputs.publish) && format('publish-{0}', github.run_id) || 'build' }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && !inputs.publish }}
 
 env:
   AOSP_REF: ${{ inputs.aosp_ref || 'android-15.0.0_r1' }}
@@ -136,8 +138,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 240
     if: >-
-      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
-          || contains(format(',{0},', inputs.extra_targets), ',linux-arm64,')) }}
+      ${{ !inputs.check_patches && (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/lptools-')
+          || (github.event_name == 'workflow_dispatch' && contains(format(',{0},', inputs.extra_targets), ',linux-arm64,'))) }}
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -168,8 +170,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 240
     if: >-
-      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
-          || contains(format(',{0},', inputs.extra_targets), ',darwin,')) }}
+      ${{ !inputs.check_patches && (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/lptools-')
+          || (github.event_name == 'workflow_dispatch' && contains(format(',{0},', inputs.extra_targets), ',darwin,'))) }}
     # A darwin failure must not block the Linux and Windows bundles, so the
     # release gate below only requires those two.
     continue-on-error: true
@@ -271,8 +273,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 480
     if: >-
-      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
-          || (contains(format(',{0},', inputs.extra_targets), ',android,') && inputs.android_abis != '')) }}
+      ${{ !inputs.check_patches && (github.event_name == 'schedule' || startsWith(github.ref, 'refs/tags/lptools-')
+          || (github.event_name == 'workflow_dispatch' && contains(format(',{0},', inputs.extra_targets), ',android,') && inputs.android_abis != '')) }}
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/prepare
@@ -311,7 +313,7 @@ jobs:
     if: |
       always() && !cancelled() && !inputs.check_patches &&
       needs.linux.result == 'success' && needs.windows.result == 'success' &&
-      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/tags/lptools-')) || (github.event_name == 'workflow_dispatch' && inputs.publish))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
