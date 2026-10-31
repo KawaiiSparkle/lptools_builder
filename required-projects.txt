@@ -65,6 +65,8 @@ platform/external/libcxxabi
 platform/external/googletest
 platform/external/libpng
 platform/external/sqlite
+# Blueprint also builds compliance_sbom; its SPDX Go packages are mandatory.
+platform/external/spdx-tools
 platform/external/go-cmp
 platform/external/golang-protobuf
 platform/external/starlark-go

@@ -269,7 +269,10 @@ class HostBuildFixture(unittest.TestCase):
                 case "$arch" in x86_64) arch=x86 ;; aarch64) arch=arm64 ;; esac
                 local host_out="$build_out/soong/host/linux-$arch"
                 case "$host_out" in /*) ;; *) host_out="$PWD/$host_out" ;; esac
-                mkdir -p "$host_out/bin"
+                mkdir -p "$host_out/bin" "$host_out/lib64/nested" "$host_out/lib"
+                printf 'fixture runtime\n' > "$host_out/lib64/libfixture.so"
+                printf 'transitive runtime\n' > "$host_out/lib64/nested/libtransitive.so"
+                printf 'secondary runtime\n' > "$host_out/lib/libsecondary.so"
                 local module
                 for module in lpmake lpdump lpunpack simg2img img2simg lpadd lpflash; do
                   printf '#!/usr/bin/env bash\n# %s\nexit 0\n' "$MOCK_COMBO" > "$host_out/bin/$module"
@@ -398,6 +401,18 @@ class HostBuildFixture(unittest.TestCase):
             with tarfile.open(archive_path) as archive:
                 self.assertIn(bundle_name + "/manifest.json", archive.getnames())
                 self.assertIn(bundle_name + "/bin/lpmake", archive.getnames())
+                for relative, payload in {
+                    "lib64/libfixture.so": b"fixture runtime\n",
+                    "lib64/nested/libtransitive.so": b"transitive runtime\n",
+                    "lib/libsecondary.so": b"secondary runtime\n",
+                }.items():
+                    member = bundle_name + "/" + relative
+                    self.assertIn(member, archive.getnames())
+                    self.assertEqual(archive.extractfile(member).read(), payload)
+                    self.assertEqual((bundle / relative).read_bytes(), payload)
+                    self.assertIn(relative, manifest["files"])
+                    self.assertEqual(manifest["files"][relative]["sha256"],
+                                     hashlib.sha256(payload).hexdigest())
             self.assertEqual(manifest["kind"], "host")
         checksum = Path(str(archive_path) + ".sha256").read_text().split()[0]
         self.assertEqual(checksum, hashlib.sha256(archive_path.read_bytes()).hexdigest())

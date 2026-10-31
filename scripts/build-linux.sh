@@ -232,6 +232,17 @@ for t in lpmake lpdump lpunpack simg2img img2simg lpadd lpflash; do
 done
 [ -z "$missing" ] || die "required binaries not built:$missing"
 
+# Soong host binaries use $ORIGIN/../lib[64] (or @loader_path on Darwin).
+# Include the installed runtime tree, including transitive shared dependencies.
+# Dereference Soong installation symlinks so the archive is self-contained.
+for libdir in lib64 lib; do
+  if [ -d "$BIN_SRC/../$libdir" ]; then
+    log "collecting host runtime $libdir"
+    mkdir -p "$BUNDLE/$libdir"
+    cp -R -L -p "$BIN_SRC/../$libdir/." "$BUNDLE/$libdir/"
+  fi
+done
+
 ( cd "$BUNDLE/bin" && file * 2>/dev/null || true )
 group_end
 

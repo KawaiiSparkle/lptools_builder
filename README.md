@@ -101,7 +101,7 @@ git 读；`repo manifest -r` 导出成功时将 `aosp-manifest.xml` 一起打包
 
 | 平台 | 下载 | 解压后 |
 |---|---|---|
-| Linux x86_64 | `lptools-linux-x86_64.tar.gz` | `bin/` + `manifest.json` + `SHA256SUMS` |
+| Linux x86_64 | `lptools-linux-x86_64.tar.gz` | `bin/` + 已安装的 `lib64/` / `lib/` 运行库 + `manifest.json` + `SHA256SUMS` |
 | Linux arm64 | `lptools-linux-arm64.tar.gz` | 同上 |
 | macOS arm64 | `lptools-darwin-arm64.tar.gz` | 同上 |
 | macOS x86_64 | `lptools-darwin-x86_64.tar.gz` | 同上 |
@@ -276,6 +276,8 @@ lptools-linux-x86_64/
 ├── bin/
 │   ├── lpmake  lpdump  lpunpack  [lpadd]  [lpflash]
 │   └── simg2img  img2simg
+├── [lib64/]          # Soong 已安装的主机共享运行库，保留相对加载路径
+├── [lib/]            # 存在时一并收集，链接解引用以脱离构建目录
 ├── manifest.json     # 本次构建记录的版本与文件哈希
 ├── SHA256SUMS
 └── [aosp-manifest.xml] # 导出成功时包含
