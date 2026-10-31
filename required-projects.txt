@@ -55,6 +55,8 @@ platform/system/core
 platform/system/tools/aidl
 platform/system/libbase
 platform/system/logging
+# module_ndk_libs/libnativehelper validates its NDK stub against this implementation.
+platform/libnativehelper
 
 # --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils --------
 platform/external/protobuf
