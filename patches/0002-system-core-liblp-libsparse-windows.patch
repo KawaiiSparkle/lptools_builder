@@ -60,7 +60,7 @@ diff --git a/libsparse/Android.bp b/libsparse/Android.bp
 index 44907a1f0..267ee8208 100644
 --- a/libsparse/Android.bp
 +++ b/libsparse/Android.bp
-@@ -58,6 +58,9 @@ cc_binary_host {
+@@ -58,6 +58,10 @@ cc_binary_host {
          darwin: {
              enabled: true,
          },
@@ -68,12 +68,14 @@ index 44907a1f0..267ee8208 100644
 +            enabled: true,
 +        },
      },
++    compile_multilib: "64", // lptools Windows bitness
  }
  
-@@ -71,6 +74,11 @@ cc_binary_host {
+@@ -71,6 +75,12 @@ cc_binary_host {
      ],
  
      cflags: ["-Werror"],
++    compile_multilib: "64", // lptools Windows bitness
 +    target: {
 +        windows: {
 +            enabled: true,
@@ -82,10 +84,11 @@ index 44907a1f0..267ee8208 100644
  }
  
  cc_binary_host {
-@@ -83,6 +91,11 @@ cc_binary_host {
+@@ -83,6 +93,12 @@ cc_binary_host {
      ],
  
      cflags: ["-Werror"],
++    compile_multilib: "64", // lptools Windows bitness
 +    target: {
 +        windows: {
 +            enabled: true,

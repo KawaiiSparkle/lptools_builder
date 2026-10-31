@@ -2,9 +2,10 @@ diff --git a/contrib/android/Android.bp b/contrib/android/Android.bp
 index d38e0626..f75db7aa 100644
 --- a/contrib/android/Android.bp
 +++ b/contrib/android/Android.bp
-@@ -70,10 +70,16 @@ cc_binary {
+@@ -70,10 +70,17 @@ cc_binary {
      defaults: ["e2fsprogs-defaults"],
  
++    compile_multilib: "64", // lptools Windows bitness
      srcs: ["ext2simg.c"],
 -    shared_libs: [
 +    static_libs: [

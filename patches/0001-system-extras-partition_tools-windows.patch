@@ -16,12 +16,13 @@ diff --git a/partition_tools/Android.bp b/partition_tools/Android.bp
 index f3be9f12..5c9011bf 100644
 --- a/partition_tools/Android.bp
 +++ b/partition_tools/Android.bp
-@@ -100,14 +100,55 @@ cc_binary {
+@@ -100,14 +100,57 @@ cc_binary {
      },
  }
  
 +cc_binary_host {
 +    name: "lpdumps",
++    compile_multilib: "64", // lptools Windows bitness
 +    defaults: ["lp_defaults"],
 +    static_libs: [
 +        "libbase",
@@ -57,6 +58,7 @@ index f3be9f12..5c9011bf 100644
 +
  cc_binary_host {
      name: "lpmake",
++    compile_multilib: "64", // lptools Windows bitness
      defaults: ["lp_defaults"],
 -    shared_libs: [
 +    static_libs: [
@@ -73,9 +75,10 @@ index f3be9f12..5c9011bf 100644
      srcs: [
          "lpmake.cc",
      ],
-@@ -121,12 +162,22 @@ cc_binary_host {
+@@ -121,12 +164,23 @@ cc_binary_host {
  cc_binary_host {
      name: "lpadd",
++    compile_multilib: "64", // lptools Windows bitness
      defaults: ["lp_defaults"],
 -    shared_libs: [
 +    static_libs: [
@@ -97,9 +100,10 @@ index f3be9f12..5c9011bf 100644
      srcs: [
          "lpadd.cc",
      ],
-@@ -176,12 +227,22 @@ cc_binary {
+@@ -176,12 +230,23 @@ cc_binary {
  cc_binary_host {
      name: "lpunpack",
++    compile_multilib: "64", // lptools Windows bitness
      defaults: ["lp_defaults"],
 -    shared_libs: [
 +    static_libs: [

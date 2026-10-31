@@ -189,6 +189,9 @@ scripts/build-windows.sh --keep-patches       # 保留补丁供检查
 成功后仅逆向本次应用的补丁，失败时保留现场供检查，`--keep-patches` 则主动保留。
 `--revert-only` 也只逆向精确匹配的补丁并拒绝漂移，不会清空整个工程的修改。
 可顺序复用已同步的树，但不要让 Linux 与 Windows 构建并发操作同一棵树。
+当前 host 构建使用 `--soong-only`，从 `OUT_DIR/soong/host/<os>-<arch>/bin` 收集产物；
+Windows 的目录名固定为 `windows-x86`，实际 32/64 位由补丁的 `compile_multilib` 选择，
+打包时再检查 PE 架构。手工撤回 32 位构建的补丁时也要传 `--arch x86`。
 
 ### 4.4 CI
 
@@ -197,7 +200,7 @@ Actions → **Build lptools** → Run workflow：
 | 输入 | 默认 | 说明 |
 |---|---|---|
 | `aosp_ref` | `android-15.0.0_r1` | `platform/manifest` 的 tag 或分支，如 `android-15.0.0_r1`、`android-16.0.0_r2`、`main` |
-| `product` | `aosp_arm64` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
+| `product` | `module_arm64` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
 | `android_abis` | `arm64,arm` | Android 实验目标请求的 ABI；还需 `extra_targets` 包含 `android`，留空则跳过该 job |
 | `check_patches` | 否 | 只跑 Windows 补丁检查，跳过所有构建及发布；首次仍需准备环境与同步源码，不应用补丁 |
 | `publish` | 否 | 勾选则创建 / 更新 GitHub Release |
@@ -240,6 +243,10 @@ Actions → **Build lptools** → Run workflow：
   `lunch` 在同一 shell 内逐次执行并实时输出，每次失败均标出目标和退出码；产品名
   优先尝试 Android 15 的 `<product>-trunk_staging-eng`，再回退旧版双段式参数。
   显式传入三段式目标时仅尝试该目标，不替换用户指定的 release。
+  Linux / Darwin / Windows host 构建默认使用 `module_arm64`，在 `lunch` 前设置
+  `TARGET_BUILD_UNBUNDLED=true` 与 `ALLOW_MISSING_DEPENDENCIES=true`，然后通过
+  `m --soong-only` 编译所需工具，避免完整 GSI 产品对 VNDK 快照和镜像的要求。
+  部分源码树允许无关模块缺失；所请求工具真正依赖的模块缺失仍会使构建失败。
 - **时间戳与颜色**：logger 自己的状态、告警及心跳行默认带 UTC 时间（`LP_TS=0`
   可关闭），底层原始输出不保证每行有时间戳。交互终端或 GitHub Actions 可使用
   ANSI 颜色，设置非空 `NO_COLOR` 或 `TERM=dumb` 时关闭 logger 的颜色；这不会

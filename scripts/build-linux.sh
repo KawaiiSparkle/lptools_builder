@@ -182,19 +182,21 @@ build_host() {
   # AOSP's environment scripts expect unset variables to expand to empty.
   set +u
   source build/envsetup.sh
-  lptools_lunch "${PRODUCT:-aosp_arm64}" || return $?
+  lptools_host_lunch "$PRODUCT" || return $?
   local lunched="$LP_LUNCH_COMBO"
   printf '%s\n' "$lunched" > "$COMBO_FILE"
-  [ -n "$ANDROID_HOST_OUT" ] || die "lunch did not export ANDROID_HOST_OUT"
-  local host_out="$ANDROID_HOST_OUT"
-  case "$host_out" in /*) ;; *) host_out="$WORK/$host_out" ;; esac
-  printf '%s\n' "$host_out/bin" > "$HOST_BIN_FILE"
+  # --soong-only installs below OUT_DIR/soong, not ANDROID_HOST_OUT (Make).
+  local install_arch="$ARCH" build_out="${OUT_DIR:-out}" host_bin
+  [ "$install_arch" != x86_64 ] || install_arch=x86
+  host_bin="$build_out/soong/host/$HOST_OS-$install_arch/bin"
+  case "$host_bin" in /*) ;; *) host_bin="$WORK/$host_bin" ;; esac
+  printf '%s\n' "$host_bin" > "$HOST_BIN_FILE"
 
-  m -j"$JOBS" lpmake lpdump lpunpack simg2img img2simg
+  m --soong-only -j"$JOBS" lpmake lpdump lpunpack simg2img img2simg
   local extra
   for extra in lpadd lpflash; do
     log "building optional $extra"
-    m -j"$JOBS" "$extra" || warn "$extra is not available on $REF"
+    m --soong-only -j"$JOBS" "$extra" || warn "$extra is not available on $REF"
   done
 }
 group_start "build (setup + lunch + m -j$JOBS)"

@@ -11,7 +11,8 @@
 #
 # Soong already ships the whole mechanism: the mingw-w64 toolchain lives in
 # prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8 and Windows host-cross
-# variants are produced under out/host_cross/windows-<arch>/bin.
+# --soong-only variants install under out/soong/host/windows-x86/bin.
+# The patch set explicitly selects 32/64 bits; Soong prefers 32 bits by default.
 #
 #   scripts/build-windows.sh                    # full build, default AOSP tag
 #   scripts/build-windows.sh --skip-sync        # reuse an already synced tree
@@ -45,6 +46,7 @@ CHECK_PATCHES=0
 APPLIED=()
 COMBO_FILE=""
 HOST_BIN_FILE=""
+PATCH_DIR=""
 finish() {
   local rc=$? cleanup_rc=0
   trap - EXIT
@@ -54,6 +56,7 @@ finish() {
   lp_finish "$rc"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
+  [ -z "$PATCH_DIR" ] || rm -rf "$PATCH_DIR"
   exit "$rc"
 }
 trap finish EXIT
@@ -95,9 +98,21 @@ PATCHES=(
   "system/core:0002-system-core-liblp-libsparse-windows.patch"
   "external/e2fsprogs:0003-external-e2fsprogs-ext2simg-windows.patch"
 )
+# Render only our marked multilib property; the same patch is used by apply,
+# check and reverse, without changing the checked-in templates.
+PATCH_DIR=$(mktemp -d)
+MULTILIB=64
+[ "$HOST_ARCH" != x86 ] || MULTILIB=32
+for entry in "${PATCHES[@]}"; do
+  patch_name=${entry#*:}
+  [ -f "$ROOT/patches/$patch_name" ] || die "missing $ROOT/patches/$patch_name"
+  sed 's/compile_multilib: "64", \/\/ lptools Windows bitness/compile_multilib: "'"$MULTILIB"'", \/\/ lptools Windows bitness/' \
+    "$ROOT/patches/$patch_name" > "$PATCH_DIR/$patch_name"
+done
+
 # Reverse exact hunks rather than checking out an entire project or touching index.
 revert_project() {
-  local entry=$1 proj="${1%%:*}" patch="$ROOT/patches/${1#*:}"
+  local entry=$1 proj="${1%%:*}" patch="$PATCH_DIR/${1#*:}"
   if git -C "$WORK/$proj" apply --check --reverse "$patch" 2>/dev/null; then
     git -C "$WORK/$proj" apply --reverse "$patch"
   elif git -C "$WORK/$proj" apply --check "$patch" 2>/dev/null; then
@@ -165,7 +180,7 @@ apply_patches() {
   done
   for entry in "${PATCHES[@]}"; do
     proj="${entry%%:*}"
-    patch="$ROOT/patches/${entry#*:}"
+    patch="$PATCH_DIR/${entry#*:}"
     log "patch ${entry#*:} -> $proj"
     if git -C "$WORK/$proj" apply --check --whitespace=nowarn "$patch" 2>/dev/null; then
       APPLIED+=("$entry")
@@ -185,7 +200,7 @@ cleanup() {
   [ "${#APPLIED[@]}" -gt 0 ] || return 0
   if [ "$KEEP_PATCHES" -eq 1 ] || [ "$rc" -ne 0 ]; then
     warn "Windows patches kept for inspection: ${APPLIED[*]}"
-    warn "to reverse them: bash scripts/build-windows.sh --work \"$WORK\" --revert-only"
+    warn "to reverse them: bash scripts/build-windows.sh --work \"$WORK\" --arch $HOST_ARCH --revert-only"
     return 0
   fi
   for entry in "${APPLIED[@]}"; do
@@ -206,7 +221,7 @@ if [ "$CHECK_PATCHES" -eq 1 ]; then
   for entry in "${PATCHES[@]}"; do
     proj="${entry%%:*}"
     name="${entry#*:}"
-    patch="$ROOT/patches/$name"
+    patch="$PATCH_DIR/$name"
     [ -d "$WORK/$proj" ] || die "missing project $proj in $WORK (did the sync cover it?)"
     if git -C "$WORK/$proj" apply --check --whitespace=nowarn "$patch" 2>/dev/null; then
       log "  ok   $name -> $proj (git apply --check)"
@@ -238,26 +253,27 @@ build_windows() {
   cd "$WORK"
   set +u
   source build/envsetup.sh
-  lptools_lunch "${PRODUCT:-aosp_arm64}" || return $?
+  lptools_host_lunch "$PRODUCT" || return $?
   local lunched="$LP_LUNCH_COMBO" t
   printf '%s\n' "$lunched" > "$COMBO_FILE"
   # OUT_DIR is a build-system setting; lunch may also set a shell variable OUT.
   local build_out="${OUT_DIR:-out}"
-  local host_goal="$build_out/host_cross/windows-$HOST_ARCH/bin"
+  # Soong uses windows-x86 for both Windows bitnesses. The patches select one.
+  local host_goal="$build_out/soong/host/windows-x86/bin"
   local host_bin="$host_goal"
   case "$host_bin" in /*) ;; *) host_bin="$WORK/$host_bin" ;; esac
   printf '%s\n' "$host_bin" > "$HOST_BIN_FILE"
   local goals=()
   for t in $REQUIRED_EXES; do goals+=("$host_goal/$t.exe"); done
-  if m -j"$JOBS" "${goals[@]}"; then :
+  if m --soong-only -j"$JOBS" "${goals[@]}"; then :
   else
     warn "path goals failed; retrying with module names (HOST_CROSS_OS=windows)"
     export HOST_CROSS_OS=windows HOST_CROSS_ARCH="$HOST_ARCH"
-    m -j"$JOBS" $REQUIRED_EXES
+    m --soong-only -j"$JOBS" $REQUIRED_EXES
   fi
   for t in $OPTIONAL_EXES; do
     log "building optional $t.exe"
-    m -j"$JOBS" "$host_goal/$t.exe" || warn "$t.exe is not available on $REF"
+    m --soong-only -j"$JOBS" "$host_goal/$t.exe" || warn "$t.exe is not available on $REF"
   done
 }
 group_start "build (setup + lunch + windows-$HOST_ARCH)"
@@ -268,7 +284,7 @@ group_end
 # --- 4. collect -------------------------------------------------------------
 group_start "collect $PLATFORM binaries"
 IFS= read -r BIN_SRC < "$HOST_BIN_FILE"
-[ -d "$BIN_SRC" ] || die "no host_cross output at $BIN_SRC"
+[ -d "$BIN_SRC" ] || die "no Soong Windows output at $BIN_SRC"
 log "collecting Windows binaries from $BIN_SRC"
 
 rm -rf "$BUNDLE"

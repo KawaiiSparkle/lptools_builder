@@ -44,6 +44,36 @@ lptools_lunch aosp_arm64
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertEqual(result.stdout.count("trying lunch"), 1)
 
+    def test_host_setup_is_exported_before_lunch_and_retains_explicit_product(self):
+        result = self.run_shell(r'''
+lunch() {
+  [ "$TARGET_BUILD_UNBUNDLED" = true ] || return 91
+  [ "$ALLOW_MISSING_DEPENDENCIES" = true ] || return 92
+  [ "$(printenv TARGET_BUILD_UNBUNDLED)" = true ] || return 93
+  [ "$(printenv ALLOW_MISSING_DEPENDENCIES)" = true ] || return 94
+  echo "host-combo:$1"
+}
+lptools_host_lunch
+[ "$LP_LUNCH_COMBO" = module_arm64-trunk_staging-eng ]
+lptools_host_lunch custom-ap3a-user
+[ "$LP_LUNCH_COMBO" = custom-ap3a-user ]
+''')
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("host-combo:module_arm64-trunk_staging-eng", result.stdout)
+        self.assertIn("host-combo:custom-ap3a-user", result.stdout)
+        self.assertEqual(result.stdout.count("trying lunch"), 2)
+
+    def test_normal_lunch_does_not_force_host_settings(self):
+        result = self.run_shell(r'''
+unset TARGET_BUILD_UNBUNDLED ALLOW_MISSING_DEPENDENCIES
+lunch() {
+  [ -z "${TARGET_BUILD_UNBUNDLED:-}" ] || return 91
+  [ -z "${ALLOW_MISSING_DEPENDENCIES:-}" ] || return 92
+}
+lptools_lunch aosp_arm64
+''')
+        self.assertEqual(result.returncode, 0, result.stdout)
+
     def test_legacy_input_tries_modern_then_legacy_and_keeps_both_outputs(self):
         result = self.run_shell(r'''
 lunch() {

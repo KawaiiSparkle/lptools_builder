@@ -43,7 +43,11 @@ liblpdump (shared) -> libprotobuf-cpp-full, libbase, liblog, liblp
 
 ## 刷新补丁（换 AOSP ref 时）
 
-补丁是按 `android-15.0.0_r25` 的 blob 上下文生成的。换 ref 后如果 `git apply -3` 报冲突：
+补丁是按 `android-15.0.0_r25` 的 blob 上下文生成的，并补充了标记为
+`// lptools Windows bitness` 的 `compile_multilib` 属性。模板使用 `"64"`，
+`build-windows.sh --arch x86` 会在临时补丁副本中替换为 `"32"`；应用、检查和撤回
+使用同一份副本，不修改模板或 Git index。撤回 32 位补丁时同样传 `--arch x86`。
+换 ref 后如果 `git apply --check` 报冲突：
 
 ```bash
 # 1) 在同步好的树里手工改到能编

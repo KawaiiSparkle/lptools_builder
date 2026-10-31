@@ -30,3 +30,12 @@ lptools_lunch() {
   warn "lunch failed; see each attempt above (requested: $requested)"
   return "$rc"
 }
+
+# Configure a partial tree before lunch evaluates the product. Host tools do not
+# need a GSI image or its VNDK snapshots. Soong still rejects missing dependencies
+# when they are required by one of the requested build targets.
+lptools_host_lunch() {
+  export TARGET_BUILD_UNBUNDLED=true
+  export ALLOW_MISSING_DEPENDENCIES=true
+  lptools_lunch "${1:-module_arm64}"
+}

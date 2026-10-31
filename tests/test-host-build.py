@@ -32,7 +32,8 @@ PROJECTS = (
     ("external/e2fsprogs", "0003-external-e2fsprogs-ext2simg-windows.patch"),
 )
 BASE_TEXT = "context before\nfeature=posix\ncontext after\n"
-PATCHED_TEXT = BASE_TEXT.replace("feature=posix", "feature=windows")
+PATCHED_TEXT = BASE_TEXT.replace(
+    "feature=posix", 'feature=windows\ncompile_multilib: "64", // lptools Windows bitness')
 
 
 class HostBuildFixture(unittest.TestCase):
@@ -74,6 +75,7 @@ class HostBuildFixture(unittest.TestCase):
             if key.startswith(("GIT_", "LPTOOLS_", "MOCK_")) or key in (
                     "BASH_ENV", "ENV", "AOSP_REF", "JOBS", "OUT", "OUT_DIR",
                     "ANDROID_HOST_OUT", "HOST_CROSS_OS", "HOST_CROSS_ARCH",
+                    "TARGET_BUILD_UNBUNDLED", "ALLOW_MISSING_DEPENDENCIES",
                     "LP_NO_GROUPS", "__LP_LOG_SH", "SOURCE_DATE_EPOCH_ISO"):
                 self.env.pop(key, None)
         self.env.update(GIT_CONFIG_NOSYSTEM="1",
@@ -212,6 +214,8 @@ class HostBuildFixture(unittest.TestCase):
             sleep "${MOCK_SETUP_DELAY:-0}"
             printf 'fixture setup completed\n'
             lunch() {
+              [ "${TARGET_BUILD_UNBUNDLED:-}" = true ] || return 93
+              [ "${ALLOW_MISSING_DEPENDENCIES:-}" = true ] || return 94
               printf 'lunch\t%s\t%s\n' "$BASHPID" "$1" >> "$TRACE"
               sleep "${MOCK_LUNCH_DELAY:-0}"
               [ "${MOCK_LUNCH_RC:-0}" = 0 ] || return "$MOCK_LUNCH_RC"
@@ -231,6 +235,10 @@ class HostBuildFixture(unittest.TestCase):
               export OUT="$PWD/lunch polluted OUT"
             }
             m() {
+              [ "${TARGET_BUILD_UNBUNDLED:-}" = true ] || return 93
+              [ "${ALLOW_MISSING_DEPENDENCIES:-}" = true ] || return 94
+              [ "${1:-}" = --soong-only ] || return 95
+              shift
               printf 'm\t%s\t%s\t%s\t%s' "$BASHPID" "${HOST_CROSS_OS:-}" "${HOST_CROSS_ARCH:-}" "$PWD" >> "$TRACE"
               printf '\t%s' "$@" >> "$TRACE"; printf '\n' >> "$TRACE"
               [ "$MOCK_SETUP_PID" = "$BASHPID" ] && [ "$MOCK_LUNCH_PID" = "$BASHPID" ] || return 97
@@ -242,7 +250,10 @@ class HostBuildFixture(unittest.TestCase):
                 esac
                 local build_out="${OUT_DIR:-out}"
                 case "$build_out" in /*) ;; *) build_out="$PWD/$build_out" ;; esac
-                local bin="$build_out/host_cross/windows-$HOST_ARCH/bin"
+                local bin="$build_out/soong/host/windows-x86/bin"
+                local bits=64
+                [ "$HOST_ARCH" != x86 ] || bits=32
+                grep -q 'compile_multilib: "'"$bits"'", // lptools Windows bitness' system/extras/subject.txt || return 98
                 mkdir -p "$bin"
                 local module
                 for module in lpmake lpdumps lpunpack lpadd simg2img img2simg append2simg ext2simg; do
@@ -253,7 +264,10 @@ class HostBuildFixture(unittest.TestCase):
                   printf 'user untracked data\n' > system/core/generated-user.txt
                 fi
               else
-                local host_out="$ANDROID_HOST_OUT"
+                local build_out="${OUT_DIR:-out}"
+                local arch="${MOCK_NATIVE_ARCH:-x86_64}"
+                case "$arch" in x86_64) arch=x86 ;; aarch64) arch=arm64 ;; esac
+                local host_out="$build_out/soong/host/linux-$arch"
                 case "$host_out" in /*) ;; *) host_out="$PWD/$host_out" ;; esac
                 mkdir -p "$host_out/bin"
                 local module
@@ -358,7 +372,7 @@ class HostBuildFixture(unittest.TestCase):
         self.assertEqual({row[0] for row in source + lunches + compiles},
                          {source[0][0]}, self.trace)
 
-    def assert_package(self, platform, product="aosp_arm64-trunk_staging-eng"):
+    def assert_package(self, platform, product="module_arm64-trunk_staging-eng"):
         bundle_name = "lptools-" + platform
         bundle = self.out / bundle_name
         manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
@@ -416,7 +430,7 @@ class LinuxHostBuildTest(HostBuildFixture):
         self.assertFalse(self.rows("repo-sync"), self.trace)
         self.assert_housekeeping()
 
-    def test_skip_sync_spaces_custom_host_out_one_shell_and_setup_heartbeat(self):
+    def test_skip_sync_spaces_soong_out_one_shell_and_setup_heartbeat(self):
         self.assertEqual(self.run_build("linux", MOCK_SETUP_DELAY=3), 0, self.output)
         self.assert_one_build_shell()
         self.assertIn("AOSP host build still running", self.output)
@@ -424,19 +438,19 @@ class LinuxHostBuildTest(HostBuildFixture):
                         self.output.index("fixture setup completed"), self.output)
         manifest = self.assert_package("linux-x86_64")
         self.assertEqual(manifest["host_arch"], "x86_64")
-        expected = self.work / "selected host artifacts/native host/bin/lpmake"
+        expected = self.work / "custom build artifacts/soong/host/linux-x86/bin/lpmake"
         self.assertTrue(expected.is_file(), self.output)
         self.assertEqual((self.out / "lptools-linux-x86_64/bin/lpmake").read_bytes(),
                          expected.read_bytes())
-        self.assertFalse((self.work / "out/host/linux-x86/bin").exists())
+        self.assertFalse((self.work / "selected host artifacts/native host/bin").exists())
 
-    def test_absolute_android_host_out_and_normalized_arm64(self):
+    def test_absolute_soong_out_and_normalized_arm64(self):
         self.assertEqual(self.run_build(
             "linux", "--arch", "aarch64", MOCK_NATIVE_ARCH="aarch64",
-            MOCK_ABSOLUTE_HOST=1, MOCK_FILE_DESCRIPTION="ELF 64-bit LSB executable, aarch64"),
+            MOCK_ABSOLUTE_OUT=1, MOCK_FILE_DESCRIPTION="ELF 64-bit LSB executable, aarch64"),
             0, self.output)
         self.assert_package("linux-arm64")
-        self.assertTrue((self.work / "absolute host artifacts/native host/bin/lpmake").is_file())
+        self.assertTrue((self.work / "absolute build artifacts/soong/host/linux-arm64/bin/lpmake").is_file())
 
     def test_envsetup_failure_preserves_status(self):
         self.assertEqual(self.run_build("linux", MOCK_SOURCE_RC=17), 17, self.output)
@@ -552,7 +566,7 @@ class WindowsHostBuildTest(HostBuildFixture):
         self.assertEqual(first[4], "-j2", self.trace)
         for goal, tool in zip(first[5:], ("lpmake", "lpdumps", "lpunpack")):
             self.assertEqual(
-                goal, f"custom build artifacts/host_cross/windows-x86_64/bin/{tool}.exe")
+                goal, f"custom build artifacts/soong/host/windows-x86/bin/{tool}.exe")
         self.assertEqual(calls[1][1:3], ["windows", "x86_64"], self.trace)
         self.assertEqual(calls[1][4:], ["-j2", "lpmake", "lpdumps", "lpunpack"], self.trace)
         self.assertIn("retrying with module names", self.output)
@@ -561,7 +575,7 @@ class WindowsHostBuildTest(HostBuildFixture):
                          "user edit made during build\n")
         self.assertEqual((self.work / "system/core/generated-user.txt").read_text(),
                          "user untracked data\n")
-        self.assert_package("windows-x86_64", "aosp_arm64-trunk_staging-eng")
+        self.assert_package("windows-x86_64")
 
     def test_absolute_out_dir_and_x86_output_goals(self):
         self.assertEqual(self.run_build(
@@ -571,7 +585,7 @@ class WindowsHostBuildTest(HostBuildFixture):
         goals = self.rows("m")[0][5:]
         self.assertEqual(len(goals), 3, self.trace)
         for goal in goals:
-            self.assertIn("/source tree/absolute build artifacts/host_cross/windows-x86/bin/", goal)
+            self.assertIn("/source tree/absolute build artifacts/soong/host/windows-x86/bin/", goal)
         self.assert_patch_contents(False)
         self.assert_package("windows-x86")
 

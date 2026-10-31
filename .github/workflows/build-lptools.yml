@@ -35,7 +35,7 @@ on:
       product:
         description: "lunch product used to bootstrap Soong"
         required: false
-        default: "aosp_arm64"
+        default: "module_arm64"
       android_abis:
         description: "Android target ABIs to build (comma separated, empty = skip)"
         required: false
@@ -86,7 +86,7 @@ concurrency:
 
 env:
   AOSP_REF: ${{ inputs.aosp_ref || 'android-15.0.0_r1' }}
-  LPTOOLS_PRODUCT: ${{ inputs.product || 'aosp_arm64' }}
+  LPTOOLS_PRODUCT: ${{ inputs.product || 'module_arm64' }}
 
 jobs:
   # --- POSIX hosts -----------------------------------------------------------
