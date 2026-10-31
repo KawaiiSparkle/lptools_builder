@@ -1,0 +1,124 @@
+# Shared preparation for every build job: reclaim disk, add swap, install the
+# dependencies and the repo tool, and make the tree reproducible enough for AOSP.
+name: Prepare AOSP build
+description: Free disk space, add swap, install build dependencies and the repo tool.
+
+inputs:
+  extra-packages:
+    description: Whitespace-separated additional apt package names (Linux jobs only).
+    required: false
+    default: ""
+  swap-size-gb:
+    description: >-
+      Minimum total active swap in GiB on Linux runners (default 12). Swap is
+      a memory fallback and consumes disk space; only the missing capacity is
+      allocated. Set 0 to leave existing swap unchanged.
+    required: false
+    default: "12"
+
+runs:
+  using: composite
+  steps:
+    - name: Show runner resources
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::resources before"
+        case "$(uname -s)" in
+          Linux) printf 'CPUs: '; nproc; free -h ;;
+          Darwin) printf 'CPUs: '; sysctl -n hw.ncpu; sysctl hw.memsize vm.swapusage ;;
+        esac
+        disk_paths=(/)
+        if [[ -d /mnt ]]; then disk_paths+=(/mnt); fi
+        df -h "${disk_paths[@]}"
+        echo "::endgroup::"
+
+    - name: Reclaim disk space (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::reclaim Linux disk space"
+        bash "$GITHUB_WORKSPACE/scripts/free-disk.sh"
+        echo "::endgroup::"
+
+    - name: Reclaim disk space (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::free-disk-darwin.sh"
+        bash "$GITHUB_WORKSPACE/scripts/free-disk-darwin.sh"
+        echo "::endgroup::"
+
+    - name: Ensure minimum swap (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        SWAP_GB: ${{ inputs.swap-size-gb }}
+      run: |
+        set -euo pipefail
+        echo "::group::swap memory fallback"
+        bash "$GITHUB_WORKSPACE/scripts/prepare-swap.sh"
+        echo "::endgroup::"
+
+    - name: Install build dependencies (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      run: |
+        set -euo pipefail
+        echo "::group::apt-get"
+        extra_packages=()
+        read -r -a extra_packages <<< "${EXTRA_PACKAGES//$'\n'/ }"
+        for package in "${extra_packages[@]}"; do
+          [[ "$package" =~ ^[a-z0-9][a-z0-9+.:=~_-]*$ ]] || {
+            echo "::error::Invalid extra package name: $package" >&2
+            exit 1
+          }
+        done
+        sudo apt-get update -o Acquire::Retries=3
+        sudo apt-get install -y --no-install-recommends -- \
+          git python3 python-is-python3 curl unzip zip gnupg \
+          openjdk-17-jdk-headless flex bison gperf build-essential \
+          libncurses-dev libssl-dev zlib1g-dev libxml2-utils rsync patch \
+          binutils file "${extra_packages[@]}"
+        echo "::endgroup::"
+
+    - name: Install build dependencies (macOS)
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::brew"
+        brew install coreutils gnu-sed rsync
+        echo "::endgroup::"
+
+    - name: Install repo
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/bin"
+        curl --fail --show-error --silent --location --retry 3 \
+          https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/.local/bin/repo"
+        chmod a+x "$HOME/.local/bin/repo"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        git config --global user.name  "lptools-builder"
+        git config --global user.email "lptools-builder@users.noreply.github.com"
+        git config --global color.ui false
+
+    - name: Show runner resources after preparation
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "::group::resources after"
+        case "$(uname -s)" in
+          Linux) printf 'CPUs: '; nproc; free -h ;;
+          Darwin) printf 'CPUs: '; sysctl -n hw.ncpu; sysctl hw.memsize vm.swapusage ;;
+        esac
+        disk_paths=(/)
+        if [[ -d /mnt ]]; then disk_paths+=(/mnt); fi
+        df -h "${disk_paths[@]}"
+        echo "::endgroup::"

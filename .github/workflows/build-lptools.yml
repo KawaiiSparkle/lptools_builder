@@ -1,114 +1,405 @@
-# Build AOSP logical-partition (super.img) host tools: lpmake / lpdump /
-# lpunpack / lpadd / lpflash.
+# Build the AOSP logical-partition (super.img) tools for every target people
+# actually run them on, from ONE pinned AOSP checkout recipe:
 #
-# Approach: **minimal checkout + official `mmm`**.
-#   - `repo init` a full AOSP manifest (a few MB of metadata, no source).
-#   - `repo sync` ONLY the projects listed in `required-projects.txt`
-#     (~20-25GB instead of ~60GB for a full tree).
-#   - Build with the official Soong `mmm`, so the binaries are bit-exact with
-#     the chosen AOSP revision and automatically absorb any liblp/libsparse
-#     API or LP-metadata changes — no vendored code that can drift.
+#   linux-x86_64    lpmake lpdump lpunpack lpadd lpflash simg2img img2simg
+#   linux-arm64     experimental: stock AOSP Linux prebuilts target x86_64
+#   darwin-arm64    (same tools, Apple Silicon host -- best effort)
+#   darwin-x86_64   (same tools, Intel host -- best effort)
+#   windows-x86_64  *.exe via AOSP's bundled mingw-w64 (host_cross), patches/ applied
+#   android-arm64 / android-arm / android-x86_64 / android-x86
+#                   experimental: requires device variants absent in stock AOSP
 #
-# Manual trigger: Actions -> "Build LP partition tools" -> Run workflow.
-# Optionally also runs monthly to track AOSP.
+# Every job runs scripts/build-*.sh, so CI and a local build cannot drift. Each
+# bundle carries manifest.json with the available AOSP and builder provenance.
+# A pinned "repo manifest -r" snapshot is included when metadata export succeeds.
+# Release notes are generated from those manifests (scripts/make-release-notes.py)
+# and list the tools actually recorded, without promising optional metadata.
 #
-# Disk: ~20-25GB (prebuilts/clang + prebuilts/build-tools alone are ~12GB).
-#   Use a self-hosted runner or a large hosted runner (e.g. ubuntu-latest-16-cores);
-#   the free ubuntu-latest (~14GB) is too small.
+# Preparation reclaims disk on disposable runners and tops up total active
+# Linux swap to 12 GiB. Swap consumes disk and only provides a memory fallback;
+# actual checkout/build space, RAM needs and performance depend on the ref/image.
+#
+# Default cost: a manual run builds linux-x86_64 + windows-x86_64 only.
+# Opt into experimental Linux ARM64, Darwin and Android with extra_targets.
+# Tag pushes and the monthly schedule build everything.
 
-name: Build LP partition tools
+name: Build lptools
 
 on:
   workflow_dispatch:
     inputs:
       aosp_ref:
-        description: 'AOSP branch/tag: `main` for latest, or a version tag like `android-15.0.0_r25`'
+        description: "platform/manifest ref: tag (android-15.0.0_r1) or branch (main)"
         required: true
-        default: 'main'
+        default: "android-15.0.0_r1"
+      product:
+        description: "lunch product used to bootstrap Soong"
+        required: false
+        default: "aosp_arm64-eng"
+      android_abis:
+        description: "Android target ABIs to build (comma separated, empty = skip)"
+        required: false
+        default: "arm64,arm"
+      check_patches:
+        description: "Only check the Windows patches; skip all builds and publishing"
+        type: boolean
+        default: false
+      publish:
+        description: "Publish the bundles as a GitHub Release"
+        type: boolean
+        default: false
+      extra_targets:
+        description: >-
+          Optional experimental targets (comma separated): linux-arm64, darwin, android.
+          Leave empty for linux-x86_64 + windows-x86_64.
+        type: choice
+        required: false
+        default: ""
+        options:
+          - ""
+          - darwin
+          - android
+          - darwin,android
+          - linux-arm64
+          - linux-arm64,darwin
+          - linux-arm64,android
+          - linux-arm64,darwin,android
+  push:
+    tags:
+      - "lptools-*"
   schedule:
-    - cron: '0 0 1 * *'
+    # Monthly rebuild of the pinned default tag, so a broken upstream change or
+    # a broken runner image is noticed without a manual run.
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: write
+
+# Ordinary manual runs supersede older ordinary runs on the same ref. Tag and
+# publish runs use separate, per-run groups so another run cannot replace their
+# pending slot or automatically cancel them. Users can still cancel any run.
+concurrency:
+  group: lptools-${{ github.workflow }}-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.publish) && format('publish-{0}', github.run_id) || 'build' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && !inputs.publish }}
 
 env:
-  TOOLS: 'lpmake lpdump lpunpack lpadd lpflash'
+  AOSP_REF: ${{ inputs.aosp_ref || 'android-15.0.0_r1' }}
+  LPTOOLS_PRODUCT: ${{ inputs.product || 'aosp_arm64-eng' }}
 
 jobs:
-  build:
-    # Requires ~25GB free disk. Use your self-hosted runner label here, or a
-    # large hosted runner such as `ubuntu-latest-16-cores`.
-    runs-on: [self-hosted, linux, x64]
-    timeout-minutes: 360
-
+  # --- POSIX hosts -----------------------------------------------------------
+  linux:
+    if: ${{ !inputs.check_patches }}
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-latest
+            arch: x86_64
     steps:
-      - name: Check free disk
-        run: |
-          df -h /
-          echo "Need ~25GB free for a minimal checkout + build output."
-
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
 
-      - name: Install build dependencies
+      - name: Build, verify, package
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git git-lfs python3 python-is-python3 curl unzip zip gnupg \
-            openjdk-11-jdk flex bison gperf build-essential \
-            libncurses5 libncurses-dev libssl-dev zlib1g-dev \
-            libxml2-utils xmlstarlet rsync
+          bash scripts/build-linux.sh \
+            --ref "$AOSP_REF" \
+            --product "$LPTOOLS_PRODUCT" \
+            --arch ${{ matrix.arch }} \
+            --work aosp \
+            --out dist
 
-      - name: Install repo tool
-        run: |
-          mkdir -p "$HOME/bin"
-          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
-          chmod a+x "$HOME/bin/repo"
-          echo "$HOME/bin" >> "$GITHUB_PATH"
+      - name: Summarize provenance
+        run: bash scripts/ci-summary.sh dist ${{ matrix.platform }}
 
-      - name: Init AOSP manifest (metadata only)
-        run: |
-          mkdir -p aosp && cd aosp
-          repo init -u https://android.googlesource.com/platform/manifest \
-            -b "${{ github.event.inputs.aosp_ref || 'main' }}" \
-            --depth=1 --partial-clone --clone-filter=blob:none
-
-      - name: Sync only required projects
-        run: |
-          cd aosp
-          # `required-projects.txt` lives at the repo root of THIS repo
-          # (checked out by actions/checkout above); copy it into the AOSP tree.
-          cp "$GITHUB_WORKSPACE/required-projects.txt" .
-          PROJECTS=$(grep -v '^\s*#' required-projects.txt | grep -v '^\s*$' | tr '\n' ' ')
-          echo "Syncing projects: $PROJECTS"
-          repo sync -c -j"$(nproc)" --no-tags $PROJECTS
-
-      - name: Build partition_tools (Linux host)
-        run: |
-          cd aosp
-          source build/envsetup.sh
-          mmm -j"$(nproc)" system/extras/partition_tools
-          mmm -j"$(nproc)" system/core/libsparse
-
-      - name: Collect Linux binaries
-        run: |
-          mkdir -p dist/linux-x86_64
-          cd aosp
-          for t in $TOOLS; do
-            cp -v "out/host/linux-x86/bin/$t" "$GITHUB_WORKSPACE/dist/linux-x86_64/" || true
-          done
-          # libsparse helpers are handy for sparse<->raw conversion
-          for t in simg2img img2simg; do
-            cp -v "out/host/linux-x86/bin/$t" "$GITHUB_WORKSPACE/dist/linux-x86_64/" || true
-          done
-          cd "$GITHUB_WORKSPACE"
-          ls -lh dist/linux-x86_64
-
-      - name: Package
-        run: |
-          cd dist
-          tar -czf lp-tools-linux-x86_64.tar.gz linux-x86_64
-          ls -lh
-
-      - name: Upload artifacts
+      - name: Upload bundle
         uses: actions/upload-artifact@v4
         with:
-          name: lp-tools-${{ github.event.inputs.aosp_ref || 'main' }}
-          path: dist/*.tar.gz
+          name: ${{ matrix.platform }}
+          path: |
+            dist/lptools-${{ matrix.platform }}.tar.gz
+            dist/lptools-${{ matrix.platform }}.tar.gz.sha256
+            dist/lptools-${{ matrix.platform }}/manifest.json
+            dist/lptools-${{ matrix.platform }}/aosp-manifest.xml
           if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+  # Stock AOSP Linux prebuilts are x86_64; this needs a ported source/toolchain.
+  # Keep the requested target available without blocking the usable host bundles.
+  linux_arm64:
+    name: build linux-arm64 (experimental)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 240
+    if: >-
+      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
+          || contains(format(',{0},', inputs.extra_targets), ',linux-arm64,')) }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+      - name: Build, verify, package
+        run: |
+          bash scripts/build-linux.sh \
+            --ref "$AOSP_REF" --product "$LPTOOLS_PRODUCT" \
+            --arch arm64 --work aosp --out dist
+      - name: Summarize provenance
+        run: bash scripts/ci-summary.sh dist linux-arm64
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: |
+            dist/lptools-linux-arm64.tar.gz
+            dist/lptools-linux-arm64.tar.gz.sha256
+            dist/lptools-linux-arm64/manifest.json
+            dist/lptools-linux-arm64/aosp-manifest.xml
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+  # --- macOS hosts (best effort: AOSP's darwin support comes and goes) -------
+  darwin:
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    if: >-
+      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
+          || contains(format(',{0},', inputs.extra_targets), ',darwin,')) }}
+    # A darwin failure must not block the Linux and Windows bundles, so the
+    # release gate below only requires those two.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            os: macos-14
+            arch: arm64
+          - platform: darwin-x86_64
+            # macos-13 (the last Intel image) was retired; macos-15-intel is
+            # GitHub's remaining x86_64 macOS runner label.
+            os: macos-15-intel
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+
+      - name: Build, verify, package
+        run: |
+          bash scripts/build-linux.sh \
+            --ref "$AOSP_REF" \
+            --product "$LPTOOLS_PRODUCT" \
+            --arch ${{ matrix.arch }} \
+            --work aosp \
+            --out dist
+
+      - name: Summarize provenance
+        run: bash scripts/ci-summary.sh dist ${{ matrix.platform }}
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: |
+            dist/lptools-${{ matrix.platform }}.tar.gz
+            dist/lptools-${{ matrix.platform }}.tar.gz.sha256
+            dist/lptools-${{ matrix.platform }}/manifest.json
+            dist/lptools-${{ matrix.platform }}/aosp-manifest.xml
+          if-no-files-found: warn
+          retention-days: 90
+          compression-level: 0
+
+  # --- Windows host-cross (built on Linux: AOSP's mingw prebuilts are Linux) --
+  windows:
+    name: build windows-x86_64
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+        with:
+          extra-packages: patch zip
+
+      - name: Verify the Windows patch set still applies
+        if: ${{ inputs.check_patches }}
+        run: |
+          bash scripts/build-windows.sh \
+            --ref "$AOSP_REF" --product "$LPTOOLS_PRODUCT" \
+            --work aosp --check-patches
+          {
+            echo "### Windows patch set"
+            echo ""
+            echo "All patches in patches/ still apply to \`$AOSP_REF\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build, package (Windows host-cross)
+        if: ${{ !inputs.check_patches }}
+        run: |
+          bash scripts/build-windows.sh \
+            --ref "$AOSP_REF" \
+            --product "$LPTOOLS_PRODUCT" \
+            --arch x86_64 \
+            --work aosp \
+            --out dist
+
+      - name: Summarize provenance
+        if: ${{ !inputs.check_patches }}
+        run: bash scripts/ci-summary.sh dist windows-x86_64
+
+      - name: Upload bundle
+        if: ${{ !inputs.check_patches }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: |
+            dist/lptools-windows-x86_64.zip
+            dist/lptools-windows-x86_64.zip.sha256
+            dist/lptools-windows-x86_64/manifest.json
+            dist/lptools-windows-x86_64/aosp-manifest.xml
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+  # --- Android device binaries ----------------------------------------------
+  android:
+    name: build android (${{ inputs.android_abis || 'arm64,arm' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    if: >-
+      ${{ !inputs.check_patches && (github.event_name != 'workflow_dispatch'
+          || (contains(format(',{0},', inputs.extra_targets), ',android,') && inputs.android_abis != '')) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/prepare
+
+      - name: Build, package (device ABIs)
+        env:
+          ANDROID_ABIS: ${{ inputs.android_abis || 'arm64,arm' }}
+        run: |
+          bash scripts/build-android.sh \
+            --ref "$AOSP_REF" \
+            --abi "$ANDROID_ABIS" \
+            --work aosp \
+            --out dist
+
+      - name: Summarize provenance
+        run: bash scripts/ci-summary.sh dist android
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            dist/lptools-android-*.tar.gz
+            dist/lptools-android-*.tar.gz.sha256
+            dist/lptools-android-*/manifest.json
+            dist/lptools-android-*/aosp-manifest.xml
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+
+  # --- Release --------------------------------------------------------------
+  release:
+    name: publish release
+    # Require the x86_64 Linux and Windows jobs; experimental jobs may fail.
+    needs: [linux, windows, linux_arm64, darwin, android]
+    if: |
+      always() && !cancelled() && !inputs.check_patches &&
+      needs.linux.result == 'success' && needs.windows.result == 'success' &&
+      (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          path: dist
+          merge-multiple: true
+
+      - name: Verify required release bundles
+        run: |
+          set -euo pipefail
+          # Each supported matrix entry must supply its archive, checksum and
+          # manifest. upload-artifact's error mode only rejects an empty upload.
+          for platform in linux-x86_64 windows-x86_64; do
+            suffix=tar.gz
+            [ "$platform" != windows-x86_64 ] || suffix=zip
+            bundle="lptools-$platform"
+            for asset in "$bundle.$suffix" "$bundle.$suffix.sha256" "$bundle/manifest.json"; do
+              [ -s "dist/$asset" ] || { echo "missing required asset: $asset" >&2; exit 1; }
+            done
+            (cd dist && sha256sum --check "$bundle.$suffix.sha256")
+          done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          for platform in ("linux-x86_64", "windows-x86_64"):
+              root = Path("dist") / ("lptools-" + platform)
+              manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+              kind = "windows" if platform.startswith("windows-") else "host"
+              if (manifest.get("platform") != platform or manifest.get("kind") != kind
+                      or not manifest.get("tools")):
+                  raise SystemExit("invalid required manifest: " + str(root))
+              pinned = manifest.get("aosp_pinned_manifest") or {}
+              if pinned.get("sha256") and not (root / "aosp-manifest.xml").is_file():
+                  raise SystemExit("missing recorded pinned manifest: " + str(root))
+          PY
+
+      - name: Generate release notes from the manifests
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            # Keep simple refs recognizable; normalize branches such as release/15.
+            # Hash changed refs so release/15 cannot collide with release-15.
+            REF_SLUG=$(python3 - <<'PY'
+          import hashlib
+          import os
+          import re
+
+          ref = os.environ["AOSP_REF"]
+          slug = re.sub(r"[^A-Za-z0-9._-]+|\.{2,}", "-", ref).strip("-.")[:80] or "ref"
+          if slug != ref:
+              slug += "-" + hashlib.sha256(ref.encode("utf-8")).hexdigest()[:12]
+          print(slug)
+          PY
+            )
+            TAG="lptools-${REF_SLUG}-$(date -u +%Y%m%d)"
+          fi
+          git check-ref-format "refs/tags/$TAG"
+          printf 'TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
+          python3 scripts/make-release-notes.py \
+            --dist dist \
+            --tag "$TAG" \
+            --repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(dist/*.tar.gz dist/*.zip dist/*.sha256)
+          [ "${#assets[@]}" -gt 0 ] || { echo "no bundle to publish" >&2; exit 1; }
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+            gh release edit "$TAG" --notes-file RELEASE_NOTES.md
+            echo "updated release $TAG"
+          else
+            gh release create "$TAG" "${assets[@]}" \
+              --title "lptools $TAG" \
+              --notes-file RELEASE_NOTES.md \
+              --latest
+            echo "created release $TAG"
+          fi

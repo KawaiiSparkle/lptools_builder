@@ -1,0 +1,4 @@
+# Keep shell scripts, YAML and patch contexts usable across Windows and POSIX.
+* text=auto eol=lf
+# Unified-diff context prefixes are syntax, including blank lines and tabs.
+*.patch -whitespace

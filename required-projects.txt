@@ -1,36 +1,51 @@
-# Minimal AOSP project list required to build the logical-partition host tools
-# (lpmake / lpdump / lpunpack / lpadd / lpflash) via `mmm`.
+# Minimum AOSP project list required to build the logical-partition host tools
+# (lpmake / lpdump / lpunpack / lpadd / lpflash) plus the sparse helpers
+# (simg2img / img2simg) with the official Soong build.
 #
-# One `platform/...` project per line. `repo sync` only checks out the projects
-# listed here (plus the build-system bootstrap deps below), so the tree stays
-# ~10GB instead of the ~60GB of a full AOSP checkout.
+# Tools that consume this list:
+#   - .github/workflows/build-lptools.yml   (CI: repo sync + m)
+#   - scripts/build-linux.sh                (local / WSL build)
+#   - tools/check_projects.py               (validates every entry against the
+#                                            AOSP manifest before syncing, so a
+#                                            typo or an upstream rename fails in
+#                                            seconds instead of after a 20GB
+#                                            sync)
 #
-# If `mmm` reports a missing module (e.g. "module X not found" or a missing
-# include), find the owning project below and append it. Keep this list sorted
-# by layer for readability.
+# Rules:
+#   * one 'platform/...' project per line, '#' starts a comment;
+#   * keep the list sorted by layer (build system -> prebuilts -> tools -> libs);
+#   * only add a project when the build actually needs it -- every entry costs
+#     disk and sync time.
 
-# --- Build system bootstrap (Soong + make + go toolchain) ---
+# --- Build system bootstrap (Soong + Kati/make + product definitions) -------
+# platform/build/make is REQUIRED: it owns build/envsetup.sh (lunch) and the
+# product definitions (build/make/target/product/*.mk) consumed by 'lunch'.
+# Without it 'source build/envsetup.sh' cannot even be sourced.
 platform/build
+platform/build/make
 platform/build/soong
 platform/build/blueprint
 platform/build/bazel
 platform/build/bazel_common_rules
 platform/bionic
 
-# --- Prebuilts (toolchains; these are the bulk of the ~10GB) ---
+# --- Prebuilts (toolchains; these are the bulk of the checkout) ------------
+# jdk17 is REQUIRED: soong_ui (build/soong/ui) needs JAVA_HOME, and AOSP pins
+# its own JDK under prebuilts/jdk. On android-12/13 pin jdk11 instead.
+platform/prebuilts/jdk/jdk17
 platform/prebuilts/build-tools
 platform/prebuilts/clang/host/linux-x86
 platform/prebuilts/go/linux-x86
 platform/prebuilts/misc
 platform/prebuilts/sdk
 
-# --- The tools themselves and their owning repos ---
+# --- The tools themselves and their owning repos ---------------------------
 platform/system/extras
 platform/system/core
 platform/system/libbase
 platform/system/logging
 
-# --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils ---
+# --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils --------
 platform/external/protobuf
 platform/external/fmtlib
 platform/external/e2fsprogs

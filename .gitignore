@@ -5,5 +5,9 @@
 /out/
 /dist/
 
+# Python bytecode (tools/)
+__pycache__/
+*.pyc
+
 # OS noise
 .DS_Store
