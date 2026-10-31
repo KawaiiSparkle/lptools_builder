@@ -39,6 +39,7 @@ finish() {
   local rc=$?
   trap - EXIT
   set +e
+  lptools_cleanup_host_product
   lp_finish "$rc"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
@@ -173,6 +174,7 @@ fi
 
 # --- 3. build with the official Soong build --------------------------------
 [ -f "$WORK/build/envsetup.sh" ] || die "no AOSP build/envsetup.sh at $WORK"
+lptools_prepare_host_product "$WORK" "$ROOT/config/host-product" "${PRODUCT:-lptools_host}"
 COMBO_FILE=$(mktemp)
 HOST_BIN_FILE=$(mktemp)
 

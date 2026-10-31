@@ -53,6 +53,7 @@ finish() {
   set +e
   if declare -F cleanup >/dev/null 2>&1; then cleanup "$rc" || cleanup_rc=$?; fi
   if [ "$rc" -eq 0 ] && [ "$cleanup_rc" -ne 0 ]; then rc=$cleanup_rc; fi
+  lptools_cleanup_host_product
   lp_finish "$rc"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
@@ -244,6 +245,7 @@ group_end
 
 # --- 3. build with the official Soong build --------------------------------
 [ -f "$WORK/build/envsetup.sh" ] || die "no AOSP build/envsetup.sh at $WORK"
+lptools_prepare_host_product "$WORK" "$ROOT/config/host-product" "${PRODUCT:-lptools_host}"
 COMBO_FILE=$(mktemp)
 HOST_BIN_FILE=$(mktemp)
 REQUIRED_EXES="lpmake lpdumps lpunpack"

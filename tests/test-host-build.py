@@ -86,6 +86,7 @@ class HostBuildFixture(unittest.TestCase):
         for name in ("build-linux.sh", "build-windows.sh", "log.sh",
                      "aosp-meta.sh", "aosp-lunch.sh", "make-manifest.py"):
             shutil.copyfile(ROOT / "scripts" / name, scripts / name)
+        shutil.copytree(ROOT / "config/host-product", self.root / "fixture/config/host-product")
         self.put("fixture/required-projects.txt",
                  "# Fixture projects only\nsystem/extras\nsystem/core\nexternal/e2fsprogs\n")
         self.put("source tree/.repo/manifest.xml",
@@ -214,6 +215,12 @@ class HostBuildFixture(unittest.TestCase):
             sleep "${MOCK_SETUP_DELAY:-0}"
             printf 'fixture setup completed\n'
             lunch() {
+              case "$1" in
+                lptools_host-*)
+                  [ -f "$LP_HOST_PRODUCT_DIR/AndroidProducts.mk" ] || return 87
+                  cmp "$LP_HOST_PRODUCT_DIR/lptools_host.mk" "$MOCK_ROOT/fixture/config/host-product/lptools_host.mk" || return 88
+                  ;;
+              esac
               [ "${TARGET_BUILD_UNBUNDLED:-}" = true ] || return 93
               [ "${ALLOW_MISSING_DEPENDENCIES:-}" = true ] || return 94
               [ "${WITH_DEXPREOPT:-}" = false ] || return 91
@@ -352,6 +359,7 @@ class HostBuildFixture(unittest.TestCase):
 
     def assert_housekeeping(self, summary=True):
         self.assertEqual(list((self.root / "tmp").iterdir()), [], self.output)
+        self.assertEqual(list((self.work / "device").glob("lptools-host.*")), [], self.output)
         depth = 0
         for line in self.output.splitlines():
             if line.startswith("::group::"):
@@ -381,7 +389,7 @@ class HostBuildFixture(unittest.TestCase):
         self.assertEqual({row[0] for row in source + lunches + compiles},
                          {source[0][0]}, self.trace)
 
-    def assert_package(self, platform, product="module_arm64-trunk_staging-eng"):
+    def assert_package(self, platform, product="lptools_host-trunk_staging-eng"):
         bundle_name = "lptools-" + platform
         bundle = self.out / bundle_name
         manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))

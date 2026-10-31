@@ -55,14 +55,36 @@ lunch() {
   echo "host-combo:$1"
 }
 lptools_host_lunch
-[ "$LP_LUNCH_COMBO" = module_arm64-trunk_staging-eng ]
+[ "$LP_LUNCH_COMBO" = lptools_host-trunk_staging-eng ]
 lptools_host_lunch custom-ap3a-user
 [ "$LP_LUNCH_COMBO" = custom-ap3a-user ]
 ''')
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("host-combo:module_arm64-trunk_staging-eng", result.stdout)
+        self.assertIn("host-combo:lptools_host-trunk_staging-eng", result.stdout)
         self.assertIn("host-combo:custom-ap3a-user", result.stdout)
         self.assertEqual(result.stdout.count("trying lunch"), 2)
+
+    def test_temporary_host_product_keeps_existing_device_files_and_cleans_after_failure(self):
+        result = self.run_shell(r'''
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+mkdir -p "$work/device/lptools-host.user"
+printf 'existing\n' > "$work/device/lptools-host.user/sentinel"
+lptools_prepare_host_product "$work" "$LPTOOLS_TEST_ROOT/config/host-product" ''
+[ -f "$LP_HOST_PRODUCT_DIR/AndroidProducts.mk" ]
+[ -f "$LP_HOST_PRODUCT_DIR/lptools_host.mk" ]
+saved=$LP_HOST_PRODUCT_DIR
+lunch() { return 37; }
+if lptools_host_lunch custom-release-user; then exit 99; else rc=$?; fi
+[ "$rc" = 37 ]
+lptools_cleanup_host_product
+[ ! -e "$saved" ]
+[ -z "$LP_HOST_PRODUCT_DIR" ]
+[ "$(cat "$work/device/lptools-host.user/sentinel")" = existing ]
+lptools_prepare_host_product "$work" missing-templates custom-release-user
+[ -z "$LP_HOST_PRODUCT_DIR" ]
+''')
+        self.assertEqual(result.returncode, 0, result.stdout)
 
     def test_normal_lunch_does_not_force_host_settings(self):
         result = self.run_shell(r'''

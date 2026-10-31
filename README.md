@@ -200,7 +200,7 @@ Actions → **Build lptools** → Run workflow：
 | 输入 | 默认 | 说明 |
 |---|---|---|
 | `aosp_ref` | `android-15.0.0_r1` | `platform/manifest` 的 tag 或分支，如 `android-15.0.0_r1`、`android-16.0.0_r2`、`main` |
-| `product` | `module_arm64` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
+| `product` | `lptools_host` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
 | `android_abis` | `arm64,arm` | Android 实验目标请求的 ABI；还需 `extra_targets` 包含 `android`，留空则跳过该 job |
 | `check_patches` | 否 | 只跑 Windows 补丁检查，跳过所有构建及发布；首次仍需准备环境与同步源码，不应用补丁 |
 | `publish` | 否 | 勾选则创建 / 更新 GitHub Release |
@@ -243,7 +243,10 @@ Actions → **Build lptools** → Run workflow：
   `lunch` 在同一 shell 内逐次执行并实时输出，每次失败均标出目标和退出码；产品名
   优先尝试 Android 15 的 `<product>-trunk_staging-eng`，再回退旧版双段式参数。
   显式传入三段式目标时仅尝试该目标，不替换用户指定的 release。
-  Linux / Darwin / Windows host 构建默认使用 `module_arm64`，在 `lunch` 前设置
+  Linux / Darwin / Windows host 构建默认使用 builder 自带的 `lptools_host`，继承官方
+  `module_arm64`，并通过 `PRODUCT_SOURCE_ROOT_DIRS` 排除 `bionic/apex/` 中的设备 APEX
+  模块；其余 Bionic 头文件和库定义仍可见。产品文件临时安装到源码树的 `device/` 下，
+  退出时只删除本次创建的目录；显式选择其他产品时不安装此配置。在 `lunch` 前设置
   `TARGET_BUILD_UNBUNDLED=true`、`ALLOW_MISSING_DEPENDENCIES=true` 与
   `WITH_DEXPREOPT=false`（host 工具不需要设备端 ART / DEX 预优化），然后通过
   `m --soong-only` 指定 host 安装路径目标，避免模块名目标连带构建 Android 变体，

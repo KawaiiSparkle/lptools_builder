@@ -39,5 +39,26 @@ lptools_host_lunch() {
   export ALLOW_MISSING_DEPENDENCIES=true
   # A host-only tree has no ART dex2oat dependency for device app preoptimization.
   export WITH_DEXPREOPT=false
-  lptools_lunch "${1:-module_arm64}"
+  lptools_lunch "${1:-lptools_host}"
+}
+
+# The caller creates this before run_beat so its EXIT trap can always remove it.
+LP_HOST_PRODUCT_DIR=
+lptools_prepare_host_product() {
+  local work="$1" templates="$2" requested="${3:-lptools_host}"
+  case "$requested" in
+    lptools_host|lptools_host-*) ;;
+    *) return 0 ;;
+  esac
+  mkdir -p "$work/device" || return $?
+  LP_HOST_PRODUCT_DIR=$(mktemp -d "$work/device/lptools-host.XXXXXX") || return $?
+  cp "$templates/AndroidProducts.mk" "$templates/lptools_host.mk" "$LP_HOST_PRODUCT_DIR/" || return $?
+  log "host product: lptools_host (exclude device bionic/apex/ modules)"
+}
+
+lptools_cleanup_host_product() {
+  if [ -n "$LP_HOST_PRODUCT_DIR" ]; then
+    rm -rf -- "$LP_HOST_PRODUCT_DIR"
+    LP_HOST_PRODUCT_DIR=
+  fi
 }
