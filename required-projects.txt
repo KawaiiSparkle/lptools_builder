@@ -12,7 +12,7 @@
 #                                            sync)
 #
 # Rules:
-#   * one 'platform/...' project per line, '#' starts a comment;
+#   * one exact manifest project name per line, '#' starts a comment;
 #   * keep the list sorted by layer (build system -> prebuilts -> tools -> libs);
 #   * only add a project when the build actually needs it -- every entry costs
 #     disk and sync time.
@@ -28,6 +28,8 @@ platform/build/blueprint
 platform/build/release
 platform/build/bazel
 platform/build/bazel_common_rules
+# Product configuration includes sampling/afdo_profiles.mk even for host builds.
+toolchain/pgo-profiles
 platform/bionic
 
 # --- Prebuilts (toolchains; these are the bulk of the checkout) ------------
@@ -38,6 +40,8 @@ platform/prebuilts/jdk/jdk21
 platform/prebuilts/bazel/common
 # Soong host_cross(windows) links against the in-tree MinGW runtime/sysroot.
 platform/prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8
+# LinuxGccRoot supplies the glibc sysroot used by Clang for Linux host binaries.
+platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
 platform/prebuilts/build-tools
 platform/prebuilts/clang/host/linux-x86
 platform/prebuilts/go/linux-x86
