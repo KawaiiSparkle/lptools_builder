@@ -51,6 +51,8 @@ platform/prebuilts/sdk
 # --- The tools themselves and their owning repos ---------------------------
 platform/system/extras
 platform/system/core
+# Soong parses aidl_interface declarations in both owning projects, even for host tools.
+platform/system/tools/aidl
 platform/system/libbase
 platform/system/logging
 
