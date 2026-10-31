@@ -4,10 +4,10 @@ check_projects.py -- validate required-projects.txt against the AOSP manifest.
 
 Why this exists
 ---------------
-repo sync silently accepts a project that no longer exists: a typo, or an
-upstream rename, shows up 20 GB later as a missing header inside a build
-failure. This script runs right after "repo init" (manifest metadata only, a
-few MB) and answers one question in under a second:
+Validate names and exact checkout paths before syncing. The same resolver
+produces the real manifest project names passed to repo sync, so validation
+and fetching cannot disagree about an alias. This runs after "repo init"
+using manifest metadata only:
 
     every project in required-projects.txt -> still present in this manifest?
 
@@ -27,11 +27,6 @@ import json
 import os
 import sys
 import xml.etree.ElementTree as ET
-
-
-def norm(name):
-    """AOSP project name -> checkout path, e.g. platform/build/make -> build/make."""
-    return name[len("platform/"):] if name.startswith("platform/") else name
 
 
 def find_manifest(repo_root):
@@ -100,7 +95,9 @@ def load_manifest(path):
                 name = node.get("name")
                 if not name:
                     continue
-                p = node.get("path") or norm(name)
+                # repo defaults path to the complete project name. In AOSP,
+                # platform/build has an explicit path="build/make".
+                p = node.get("path") or name
                 projects.setdefault(name, set()).add(p)
             elif tag == "remove-project":
                 name = node.get("name")
@@ -121,13 +118,33 @@ def read_required(list_path):
     return out
 
 
+def resolve_required(required, projects):
+    """Resolve exact manifest names or checkout paths; never invent aliases."""
+    resolved = []
+    missing = []
+    for req in required:
+        if req in projects:
+            matches = [(req, path) for path in sorted(projects[req])]
+        else:
+            matches = [(name, req) for name, paths in sorted(projects.items())
+                       if req in paths]
+        if not matches:
+            missing.append(req)
+        for name, path in matches:
+            resolved.append({"project": req, "name": name, "path": path})
+    return resolved, missing
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Validate AOSP project list")
     ap.add_argument("--repo-root", default="aosp",
                     help="directory that contains .repo/ (default: aosp)")
     ap.add_argument("--list", default="required-projects.txt",
                     help="project list file (default: required-projects.txt)")
-    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    output = ap.add_mutually_exclusive_group()
+    output.add_argument("--json", action="store_true", help="machine-readable output")
+    output.add_argument("--print-projects", action="store_true",
+                        help="print only unique, validated manifest project names for repo sync")
     args = ap.parse_args(argv)
 
     manifest = find_manifest(args.repo_root)
@@ -137,30 +154,26 @@ def main(argv):
         return 2
 
     projects, warnings = load_manifest(manifest)
-    known_names = set(projects)
-    known_paths = set()
-    for paths in projects.values():
-        known_paths.update(paths)
-
     required = read_required(args.list)
-    missing = []
-    resolved = []
-    for req in required:
-        expected_path = norm(req)
-        if req in known_names:
-            resolved.append({"project": req, "path": sorted(projects[req])[0]})
-        elif expected_path in known_paths or req in known_paths:
-            resolved.append({"project": req, "path": expected_path})
-        else:
-            missing.append(req)
+    resolved, missing = resolve_required(required, projects)
+    sync_projects = list(dict.fromkeys(row["name"] for row in resolved))
 
-    if args.json:
+    if args.print_projects:
+        for warning in warnings:
+            print("error: " + warning, file=sys.stderr)
+        for req in missing:
+            print("error: project not found in manifest: " + req, file=sys.stderr)
+        if not missing and not warnings:
+            for name in sync_projects:
+                print(name)
+    elif args.json:
         print(json.dumps({
             "manifest": manifest,
             "manifest_projects": len(projects),
             "required": len(required),
             "missing": missing,
             "resolved": resolved,
+            "sync_projects": sync_projects,
             "warnings": warnings,
         }, indent=2))
     else:
@@ -174,10 +187,10 @@ def main(argv):
                   " different -b ref):")
             for m in missing:
                 print("  - " + m)
-        else:
+        elif not warnings:
             print("OK: every required project resolves in this manifest.")
 
-    return 1 if missing else 0
+    return 1 if missing or warnings else 0
 
 
 if __name__ == "__main__":

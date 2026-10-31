@@ -18,11 +18,10 @@
 #     disk and sync time.
 
 # --- Build system bootstrap (Soong + Kati/make + product definitions) -------
-# platform/build/make is REQUIRED: it owns build/envsetup.sh (lunch) and the
-# product definitions (build/make/target/product/*.mk) consumed by 'lunch'.
-# Without it 'source build/envsetup.sh' cannot even be sourced.
+# platform/build is checked out at build/make in the AOSP manifest. Its
+# copy/link files provide build/envsetup.sh and the product definitions.
+# platform/build/make is not a repository name; do not add that alias.
 platform/build
-platform/build/make
 platform/build/soong
 platform/build/blueprint
 platform/build/bazel

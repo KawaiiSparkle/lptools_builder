@@ -34,6 +34,7 @@ ARCH_ARG=
 LUNCH_LOG=""
 COMBO_FILE=""
 HOST_BIN_FILE=""
+PROJECTS_FILE=""
 finish() {
   local rc=$?
   trap - EXIT
@@ -42,6 +43,7 @@ finish() {
   [ -z "$LUNCH_LOG" ] || rm -f "$LUNCH_LOG"
   [ -z "$COMBO_FILE" ] || rm -f "$COMBO_FILE"
   [ -z "$HOST_BIN_FILE" ] || rm -f "$HOST_BIN_FILE"
+  [ -z "$PROJECTS_FILE" ] || rm -f "$PROJECTS_FILE"
   exit "$rc"
 }
 trap finish EXIT
@@ -141,20 +143,26 @@ if [ "$SKIP_SYNC" -eq 0 ]; then
   ( cd "$WORK" && run_beat "repo init" repo init \
       -u https://android.googlesource.com/platform/manifest -b "$REF" --depth=1 )
 
-  # Validate project names before downloading their source trees.
-  log "validating required-projects.txt against the manifest"
+  # Use the validated, actual manifest names for sync as well as validation.
+  log "resolving required-projects.txt against the manifest"
+  PROJECTS_FILE=$(mktemp)
   python3 "$ROOT/tools/check_projects.py" --repo-root "$WORK" --list "$ROOT/required-projects.txt" \
+    --print-projects > "$PROJECTS_FILE" \
     || die "required-projects.txt does not match this manifest; fix it or pick another --ref"
+  PROJECTS=()
+  while IFS= read -r project; do
+    [ -z "$project" ] || PROJECTS+=("$project")
+  done < "$PROJECTS_FILE"
+  [ "${#PROJECTS[@]}" -gt 0 ] || die "no projects resolved from required-projects.txt"
   group_end
 fi
 
 # --- 2. sync only what we need ----------------------------------------------
 if [ "$SKIP_SYNC" -eq 0 ]; then
   group_start "sync (${REF})"
-  PROJECTS=$(grep -v "^[[:space:]]*#" "$ROOT/required-projects.txt" | grep -v "^[[:space:]]*$" | tr "\n" " ")
-  log "repo sync: $(echo "$PROJECTS" | wc -w) projects (-j$JOBS)"
+  log "repo sync: ${#PROJECTS[@]} resolved projects (-j$JOBS)"
   ( cd "$WORK" && run_beat "repo sync" repo sync -c -j"$JOBS" --no-tags \
-      --optimized-fetch --prune --fail-fast $PROJECTS )
+      --optimized-fetch --prune --fail-fast "${PROJECTS[@]}" )
 
   group_end
 fi

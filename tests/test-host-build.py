@@ -120,7 +120,11 @@ class HostBuildFixture(unittest.TestCase):
                 [ -n "$ref" ] || exit 91
                 mkdir -p .repo
                 printf '%s\n' "$ref" > .repo/requested-ref
-                printf '<manifest><default revision="%s"/></manifest>\n' "$ref" > .repo/manifest.xml
+                if [ -n "${MOCK_MANIFEST_XML:-}" ]; then
+                  printf '%s\n' "$MOCK_MANIFEST_XML" > .repo/manifest.xml
+                else
+                  printf '<manifest><default revision="%s"/></manifest>\n' "$ref" > .repo/manifest.xml
+                fi
                 ;;
               sync)
                 printf 'repo-sync\t%s' "$PWD" >> "$TRACE"
@@ -181,6 +185,7 @@ class HostBuildFixture(unittest.TestCase):
             parser = argparse.ArgumentParser()
             parser.add_argument("--repo-root", required=True)
             parser.add_argument("--list", required=True)
+            parser.add_argument("--print-projects", action="store_true")
             args = parser.parse_args()
             work = Path(args.repo_root)
             assert work.is_absolute(), args.repo_root
@@ -189,6 +194,8 @@ class HostBuildFixture(unittest.TestCase):
             assert requested == os.environ["MOCK_EXPECT_REF"], requested
             with (work.parent / "trace").open("a", encoding="utf-8") as stream:
                 stream.write("check-projects\t" + requested + "\n")
+            if args.print_projects:
+                print("system/extras\nsystem/core\nexternal/e2fsprogs")
         ''')
         for name in ("sudo", "curl", "wget", "ssh", "make", "ninja", "m", "gh"):
             self.put("mock-bin/" + name, r'''
@@ -388,6 +395,27 @@ class HostBuildFixture(unittest.TestCase):
 
 
 class LinuxHostBuildTest(HostBuildFixture):
+    def test_sync_uses_real_manifest_names_and_rejects_invented_alias(self):
+        shutil.copyfile(ROOT / "tools/check_projects.py",
+                        self.root / "fixture/tools/check_projects.py")
+        self.put("fixture/required-projects.txt",
+                 "platform/build\nbuild/make\nplatform/build\n")
+        manifest = ('<manifest><project name="platform/build" path="build/make"/>'
+                    '</manifest>')
+        self.assertEqual(self.run_build("linux", "--sync-only", sync=True,
+                                        MOCK_MANIFEST_XML=manifest), 0, self.output)
+        self.assertEqual(self.rows("repo-sync")[0][-1], "platform/build", self.trace)
+        self.assertEqual(self.rows("repo-sync")[0].count("platform/build"), 1)
+        self.assertNotIn("build/make", self.rows("repo-sync")[0])
+        self.assert_housekeeping()
+
+        self.put("fixture/required-projects.txt", "platform/build/make\n")
+        self.assertEqual(self.run_build("linux", "--sync-only", sync=True,
+                                        MOCK_MANIFEST_XML=manifest), 1, self.output)
+        self.assertIn("project not found in manifest: platform/build/make", self.output)
+        self.assertFalse(self.rows("repo-sync"), self.trace)
+        self.assert_housekeeping()
+
     def test_skip_sync_spaces_custom_host_out_one_shell_and_setup_heartbeat(self):
         self.assertEqual(self.run_build("linux", MOCK_SETUP_DELAY=3), 0, self.output)
         self.assert_one_build_shell()

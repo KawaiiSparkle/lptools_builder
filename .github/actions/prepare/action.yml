@@ -92,8 +92,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        echo "::group::brew"
-        brew install coreutils gnu-sed rsync
+        echo "::group::macOS build dependencies"
+        # The scripts support BSD sed/tar and shasum. Use the runner tools
+        # instead of requiring Homebrew bottles on older Intel images.
+        for tool in git python3 curl unzip zip rsync patch file tar gzip sed shasum; do
+          command -v "$tool" >/dev/null || {
+            echo "::error::Missing required macOS build tool: $tool" >&2
+            exit 1
+          }
+        done
+        echo "Using the runner-provided BSD tools; no Homebrew install needed."
         echo "::endgroup::"
 
     - name: Install repo

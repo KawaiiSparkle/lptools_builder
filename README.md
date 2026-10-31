@@ -27,7 +27,7 @@ LP（Logical Partition）元数据是 AOSP 单方面演进的（v10.0 → v10.1 
 |---|---|---|---|
 | 1 | 目录级构建入口与模块定义不匹配 | 可能遇到 `No Android.mk found` 等入口错误 | 显式调用 `m <模块名>`（Soong 模块入口） |
 | 2 | 没有 `lunch` | Soong 直接拒绝：`TARGET_PRODUCT is not defined` | 构建前 `lunch`（带多候选回退） |
-| 3 | 依赖清单缺 `platform/build/make` | `build/envsetup.sh` 根本不存在（它属于 build/make 仓库），`source` 直接失败 | 清单补齐，并加 `tools/check_projects.py` 在同步前校验 |
+| 3 | 仓库名与检出路径混用 | `platform/build` 检出到 `build/make`；不存在 `platform/build/make` 仓库，直接同步会失败 | 校验器输出去重后的真实 manifest 项目名，构建脚本使用同一结果同步 |
 | 4 | 依赖自定义 runner，且未预算磁盘 / 内存 | 同步、编译可能耗尽资源；可用量随 runner 镜像变化 | 托管 runner + prepare action 分别清理磁盘、准备 swap，并输出前后资源数据 |
 | 5 | 只传 artifact，不发布、不验证、无哈希 | 90 天后 artifact 过期；没人知道产物对不对；下游无法固定引用 | 端到端冒烟测试 + `manifest.json` + `SHA256SUMS` + GitHub Release |
 
@@ -65,7 +65,7 @@ workflow 配置的目标矩阵（文件名是预期产物，尚不表示已构�
 | `linux-x86_64` | `lptools-linux-x86_64.tar.gz` | ubuntu runner 原生 `m` | 必需 |
 | `linux-arm64` | `lptools-linux-arm64.tar.gz` | `ubuntu-24.04-arm` 上尝试 host 构建，需要适配 AOSP 的 x86_64 预编译工具链 | 实验（失败不阻塞发布） |
 | `windows-x86_64` | `lptools-windows-x86_64.zip` | Linux 上 host_cross(windows) + `patches/` | 必需 |
-| `darwin-arm64` | `lptools-darwin-arm64.tar.gz` | `macos-14` 上尝试 host 构建 | 实验（失败不阻塞发布） |
+| `darwin-arm64` | `lptools-darwin-arm64.tar.gz` | `macos-15` 上尝试 host 构建 | 实验（失败不阻塞发布） |
 | `darwin-x86_64` | `lptools-darwin-x86_64.tar.gz` | `macos-15-intel` 上尝试 host 构建 | 实验 |
 | `android-arm64` / `android-arm` | `lptools-android-<abi>.tar.gz` | 在 Linux 上尝试构建并收集产品的 bionic device 输出 | 实验 |
 

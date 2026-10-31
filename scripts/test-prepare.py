@@ -304,13 +304,30 @@ class PrepareTests(unittest.TestCase):
 
     def test_package_install_errors_propagate(self):
         for failure, step in (("apt-update", "Install build dependencies (Linux)"),
-                              ("apt-install", "Install build dependencies (Linux)"),
-                              ("brew", "Install build dependencies (macOS)")):
+                              ("apt-install", "Install build dependencies (Linux)")):
             with self.subTest(failure=failure):
                 result = self.run_script(STEPS[step]["run"], MOCK_FAIL=failure)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn("::endgroup::", result.stdout)
-        self.assertEqual(sum(call[0] == "brew" for call in self.calls()), 1)
+
+    def test_macos_uses_runner_tools_without_homebrew(self):
+        probe = """
+command() {
+  if [[ "$1" == -v ]]; then
+    record probe "$2"
+    [[ "$2" != "${MOCK_MISSING_TOOL:-}" ]]
+  else
+    builtin command "$@"
+  fi
+}
+"""
+        script = probe + STEPS["Install build dependencies (macOS)"]["run"]
+        self.assert_success(self.run_script(script, MOCK_FAIL="brew"))
+        self.assertFalse(any(call[0] == "brew" for call in self.calls()))
+        result = self.run_script(script, MOCK_MISSING_TOOL="rsync")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("Missing required macOS build tool: rsync", result.stderr)
+        self.assertNotIn("::endgroup::", result.stdout)
 
     def test_repo_download_has_fail_retry_and_propagates_errors(self):
         result = self.run_script(STEPS["Install repo"]["run"], MOCK_FAIL="curl")
