@@ -27,11 +27,17 @@ echo "smoke test: $BIN_DIR"
 
 # --- 1. every binary starts and parses its own flags ------------------------
 for t in lpmake lpdump lpunpack; do
-  if "$BIN_DIR/$t" --help >/dev/null 2>&1 || "$BIN_DIR/$t" -h >/dev/null 2>&1; then
-    pass "$t --help"
-  else
-    fail "$t cannot print help (wrong arch / missing loader?)"
-  fi
+  # lpmake returns EX_USAGE for --help; successful startup is shown by its text.
+  help_output=$("$BIN_DIR/$t" --help 2>&1) || true
+  case "$help_output" in
+    *[Uu]sage:*) ;;
+    *) help_output=$("$BIN_DIR/$t" -h 2>&1) || true ;;
+  esac
+  case "$help_output" in
+    *[Uu]sage:*) pass "$t help" ;;
+    *) printf '%s\n' "$help_output" >&2
+       fail "$t cannot print help (wrong arch / missing loader?)" ;;
+  esac
 done
 
 # --- 2. lpmake -> lpdump -> lpunpack round trip -----------------------------
@@ -62,9 +68,9 @@ grep -q "vendor" "$tmp/dump.txt" || fail "lpdump output has no vendor partition"
 pass "lpdump lists system + vendor"
 
 mkdir -p "$tmp/out"
-if ! "$BIN_DIR/lpunpack" -s 0 "$tmp/super.img" "$tmp/out" >/dev/null 2>&1; then
-  "$BIN_DIR/lpunpack" "$tmp/super.img" "$tmp/out" >/dev/null 2>&1 \
-    || fail "lpunpack failed on a lpmake-produced image"
+if ! "$BIN_DIR/lpunpack" --slot=0 "$tmp/super.img" "$tmp/out" >"$tmp/unpack.log" 2>&1; then
+  cat "$tmp/unpack.log" >&2
+  fail "lpunpack failed on a lpmake-produced image"
 fi
 
 [ -f "$tmp/out/system.img" ] || fail "lpunpack did not extract system.img"
