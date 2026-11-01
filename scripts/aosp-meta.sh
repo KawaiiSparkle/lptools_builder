@@ -88,7 +88,55 @@ print(default.get("revision", "") if default is not None else "", end="")
 LPTOOLS_REVISION
 }
 
-# lptools_aosp_resolve_ref <work> [default-revision] [requested-ref]:
+# Classify a bare project revision using fetched refs on checked-out projects.
+# A rolling manifest branch can differ from its projects' default branch.
+lptools_aosp_project_ref_kind() {
+  local work=$1 merged=$2 revision=$3
+  [ -s "$merged" ] || return 0
+  python3 - "$work" "$merged" "$revision" <<'LPTOOLS_PROJECT_REF'
+import subprocess
+import sys
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+work, manifest, revision = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+root = ET.parse(manifest).getroot()
+default = root.find("default")
+default_remote = default.get("remote", "") if default is not None else ""
+default_revision = default.get("revision", "") if default is not None else ""
+remotes = {r.get("name"): r.get("revision", "") for r in root.findall("remote")}
+kinds = set()
+
+
+def commit(path, ref):
+    result = subprocess.run(["git", "-C", str(path), "rev-parse", "--verify", "--quiet",
+                             ref + "^{commit}"], text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+for project in root.iter("project"):
+    remote = project.get("remote") or default_remote
+    effective = project.get("revision") or remotes.get(remote) or default_revision
+    if effective not in (revision, "refs/heads/" + revision, "refs/tags/" + revision):
+        continue
+    path = work / (project.get("path") or project.get("name"))
+    if not (path / ".git").exists():
+        continue
+    head = commit(path, "HEAD")
+    if not head:
+        continue
+    if commit(path, "refs/tags/" + revision) == head:
+        kinds.add("tag")
+    if any(commit(path, ref) == head for ref in
+           ("refs/remotes/" + remote + "/" + revision, "refs/heads/" + revision)):
+        kinds.add("branch")
+if len(kinds) == 1:
+    print(next(iter(kinds)), end="")
+LPTOOLS_PROJECT_REF
+}
+
+# lptools_aosp_resolve_ref <work> [default-revision] [requested-ref] [merged-manifest]:
 # print "<branch><TAB><tag>" for this tree.
 #
 # Evidence order, no guessing:
@@ -104,6 +152,7 @@ LPTOOLS_REVISION
 lptools_aosp_resolve_ref() {
   local work=$1 defrev=${2:-} requested=${3:-}
   local mdir="$1/.repo/manifests" merge="" kind="" cand="" from_merge=0
+  local merged=${4:-} project_kind=""
   if [ -d "$mdir" ]; then
     merge=$(git -C "$mdir" config --get branch.default.merge 2>/dev/null || true)
   fi
@@ -155,7 +204,14 @@ lptools_aosp_resolve_ref() {
     printf '%s\t' "$cand"
     return 0
   fi
-  lptools_aosp_die "manifest revision '$cand' matches no ref in $mdir; recording neither a branch nor a tag for it"
+  if [ -n "$merged" ] && [ -n "$defrev" ] && ! [[ $cand =~ ^[0-9a-fA-F]{40}$ ]]; then
+    project_kind=$(lptools_aosp_project_ref_kind "$work" "$merged" "$cand") || return 1
+    case "$project_kind" in
+      branch) printf '%s\t' "$cand"; return 0 ;;
+      tag) printf '\t%s' "$cand"; return 0 ;;
+    esac
+  fi
+  lptools_aosp_die "manifest revision '$cand' matches no ref in $mdir or synced projects; recording neither a branch nor a tag for it"
   printf '\t'
 }
 
@@ -342,7 +398,7 @@ _lptools_aosp_export() {
 
   lptools_aosp_merged_manifest "$work" "$merged" "$errlog" || return 1
   defrev=$(lptools_aosp_default_revision "$merged" || true)
-  pair=$(lptools_aosp_resolve_ref "$work" "$defrev" "$requested") || return 1
+  pair=$(lptools_aosp_resolve_ref "$work" "$defrev" "$requested" "$merged") || return 1
   branch=${pair%%$'\t'*}
   tag=${pair#*$'\t'}
   # repo always names its local manifest checkout "default", whatever ref it

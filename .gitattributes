@@ -2,3 +2,4 @@
 * text=auto eol=lf
 # Unified-diff context prefixes are syntax, including blank lines and tabs.
 *.patch -whitespace
+*.diff -whitespace

@@ -531,5 +531,48 @@ printf 'REACHED-AFTER-EXPORT\\n'
         self.assertEqual(fields["TAG"], "")
         self.assertNotIn("matches no ref", result.stdout)
 
+    def rolling_checkout(self):
+        self.write_manifest("""<manifest>
+  <remote name="aosp" fetch=".."/>
+  <default revision="android17-release" remote="aosp"/>
+  <project name="platform/system/core" path="system/core"/>
+</manifest>
+""")
+        self.manifest_checkout("refs/heads/android-latest-release")
+        head = self.synced_project("system/core")
+        return self.work / "system/core", head
+
+    def test_rolling_branch_is_verified_against_synced_project_ref(self):
+        project, head = self.rolling_checkout()
+        self.git(project, "update-ref", "refs/remotes/aosp/android17-release", head)
+        result = self.export(requested="android-latest-release")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.fields(result)["BRANCH"], "android17-release")
+        self.assertEqual(self.fields(result)["TAG"], "")
+
+    def test_rolling_revision_with_no_matching_project_ref_stays_unknown(self):
+        self.rolling_checkout()
+        result = self.export(requested="android-latest-release")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.fields(result)["BRANCH"], "")
+        self.assertEqual(self.fields(result)["TAG"], "")
+
+    def test_project_tag_classifies_bare_default_revision(self):
+        project, head = self.rolling_checkout()
+        self.git(project, "update-ref", "refs/tags/android17-release", head)
+        result = self.export(requested="android-latest-release")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.fields(result)["BRANCH"], "")
+        self.assertEqual(self.fields(result)["TAG"], "android17-release")
+
+    def test_ambiguous_project_branch_and_tag_are_not_guessed(self):
+        project, head = self.rolling_checkout()
+        self.git(project, "update-ref", "refs/remotes/aosp/android17-release", head)
+        self.git(project, "update-ref", "refs/tags/android17-release", head)
+        result = self.export(requested="android-latest-release")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.fields(result)["BRANCH"], "")
+        self.assertEqual(self.fields(result)["TAG"], "")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

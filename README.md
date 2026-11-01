@@ -310,9 +310,12 @@ Release 说明里的三张表都是机器从产物里读出来的，没有手写
 安装目标，没有修改上游 C/C++ 或 Android.bp。
 
 流程为同步、确认各上游项目干净、编译、打包目录内的工具往返验证、保存来源记录。
-Artifact **lp-upstream-linux-x86_64** 包含 bundle、SHA-256 和来源记录；失败时也尝试
+Artifact **lp-upstream-linux-x86_64** 包含 bundle、SHA-256、同步/构建日志和来源记录；失败时也尝试
 保存实际拉取的 branch、manifest 提交、各项目提交和源码状态。只有云端实际通过
-才代表本次 ref 编译成功。其他 target 的适配以这个原版构建结果为基线另行推进。
+才代表本次 ref 编译成功。2026-11-01 已在 4 核 Codespaces 实测原版
+`android-latest-release`（实际 `android17-release`）成功构建 7 个工具，完整流程
+26 分 01 秒，热树复验 51 秒；镜像与 sparse 往返通过。源码身份、命令和验证边界
+见[原版构建基线](docs/upstream-baseline.md)。其他 target 以此基线另行适配。
 
 [scripts/make-upstream-workflow.py](scripts/make-upstream-workflow.py) 生成此入口，
 复用脚本嵌入机制；修改嵌入的脚本后须重新生成。其他平台的上游能力与分阶段

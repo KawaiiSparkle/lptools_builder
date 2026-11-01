@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <!-- lptools: partial pinned manifest: 41 of 1084 manifest projects were synced and are pinned to their checked-out commits -->
+  <remote name="aosp" fetch=".." review="https://android-review.googlesource.com/" />
+  <default remote="aosp" revision="android17-release" sync-j="4" />
+  <project name="platform/bionic" path="bionic" groups="pdk" revision="06356e41c5ed7b12220b24c05ba4fdb873b126a7" />
+  <project name="platform/build" path="build/make" groups="pdk,sysui-studio" revision="5ce6f787337d0223710bf7d4a16dbe6d2a35f777">
+    <linkfile src="CleanSpec.mk" dest="build/CleanSpec.mk" />
+    <linkfile src="buildspec.mk.default" dest="build/buildspec.mk.default" />
+    <linkfile src="core" dest="build/core" />
+    <linkfile src="envsetup.sh" dest="build/envsetup.sh" />
+    <linkfile src="target" dest="build/target" />
+    <linkfile src="tools" dest="build/tools" />
+  </project>
+  <project name="platform/build/blueprint" path="build/blueprint" groups="pdk,tradefed" revision="7f2058de8155b05ea3c3f8317d33bfe732cacf8b" />
+  <project name="platform/build/release" path="build/release" groups="pdk,sysui-studio,tradefed" revision="c85f4aebe46714235599a9bd6430a0fe30c6e8d5" />
+  <project name="platform/build/soong" path="build/soong" groups="pdk,sysui-studio,tradefed" revision="6722dd8833db7482df1a2543ca3fcf67ddf0f7b1">
+    <linkfile src="root.bp" dest="Android.bp" />
+    <linkfile src="bootstrap.bash" dest="bootstrap.bash" />
+  </project>
+  <project name="platform/external/abseil-cpp" path="external/abseil-cpp" groups="pdk" revision="474258796bcf112de75a1f89d022ba80b6d0b746" />
+  <project name="platform/external/boringssl" path="external/boringssl" groups="pdk" revision="0cd1f6a94b670e6b61af95a06e71e690ae8e3262" />
+  <project name="platform/external/e2fsprogs" path="external/e2fsprogs" groups="pdk" revision="3eb17241db7cd4408cc1bce9d25b602465ace8ff" />
+  <project name="platform/external/fmtlib" path="external/fmtlib" groups="pdk" revision="e3bef0ad2e9d4ea38ba3b4b2b59e0514f7025fed" />
+  <project name="platform/external/go-cmp" path="external/go-cmp" groups="pdk" revision="2f92873cfcd27cbe5efa168d8399038980aef6be" />
+  <project name="platform/external/golang-protobuf" path="external/golang-protobuf" groups="pdk" revision="fcb969a6e0df55f1460721e1b9c4f2c4d2b5a47f" />
+  <project name="platform/external/googletest" path="external/googletest" groups="pdk" revision="9bcfc87429e9a9e02ccf2b8424b748f05c4842a5" />
+  <project name="platform/external/libcxx" path="external/libcxx" groups="pdk" revision="88894a62bb97313ed9bf79a546f1486de4b2e723" />
+  <project name="platform/external/libcxxabi" path="external/libcxxabi" groups="pdk" revision="84450eba5a24fe5b7df77ed1307bfada05b14dc7" />
+  <project name="platform/external/libpng" path="external/libpng" groups="pdk" revision="f3997b4b299d808f122ab1d999556d57abf5540d" />
+  <project name="platform/external/llvm" path="external/llvm" groups="pdk" revision="429d6c6097aea3326e49fc8e87cc7658b750c5d7" />
+  <project name="platform/external/pogreb" path="external/pogreb" groups="pdk" revision="46b62444a3e31bf834331a78234deedee386ad88" />
+  <project name="platform/external/protobuf" path="external/protobuf" groups="pdk,sysui-studio" revision="db06feae31e2a10ffc7ddaccd9e285ff7c13c0ab" />
+  <project name="platform/external/spdx-tools" path="external/spdx-tools" groups="pdk" revision="2be2ac6049b9dfc88b9d047ae7b06b6207290cd6" />
+  <project name="platform/external/sqlite" path="external/sqlite" groups="pdk" revision="7961228217942c86f2b0bd2ae4115d00e157fc0b" />
+  <project name="platform/external/starlark-go" path="external/starlark-go" groups="pdk" revision="4947cdc739c985f6d86941e22894f5cefe7c9e9a" />
+  <project name="platform/external/zlib" path="external/zlib" groups="pdk" revision="8731e6760935ad5289fd64c37d28155a0fa289e3" />
+  <project name="platform/libnativehelper" path="libnativehelper" groups="pdk" revision="5b63a7e308ca88c5c4a2a74dfda9c73ed17cfebb" />
+  <project name="platform/prebuilts/bazel/common" path="prebuilts/bazel/common" groups="pdk" clone-depth="1" revision="e24e8ba7c6deed0e2e9c36ad6f255437acd98e0d" />
+  <project name="platform/prebuilts/build-tools" path="prebuilts/build-tools" groups="pdk,sysui-studio" clone-depth="1" revision="9b6c8c6a2f582a9d7817fd8275c8014959c60cc4" />
+  <project name="platform/prebuilts/clang/host/linux-x86" path="prebuilts/clang/host/linux-x86" groups="pdk,sysui-studio" clone-depth="1" revision="29182889399818f97baa65ea238c80e8117981eb" />
+  <project name="platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8" path="prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8" groups="linux,pdk" clone-depth="1" revision="ae37c9849d97a20b97ff5ce93a5b171c6d5d02ab" />
+  <project name="platform/prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8" path="prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8" groups="pdk-cw-fs,pdk-fs" clone-depth="1" revision="a6c64a6502e0a89ee8ad3e3f8be97223a69e5bd7" />
+  <project name="platform/prebuilts/go/linux-x86" path="prebuilts/go/linux-x86" groups="linux,pdk,tradefed" clone-depth="1" revision="05bc4bad6bdd9e5615c147c54e6f1a53bf04c375" />
+  <project name="platform/prebuilts/jdk/jdk21" path="prebuilts/jdk/jdk21" groups="pdk,sysui-studio" clone-depth="1" revision="ef5bcc92586b839ae3dbacc154127092fa4002ec" />
+  <project name="platform/prebuilts/misc" path="prebuilts/misc" groups="pdk,sysui-studio" clone-depth="1" revision="be7c3a630b5dc5eb3260035d77a81b2f322754f8" />
+  <project name="platform/prebuilts/sdk" path="prebuilts/sdk" groups="pdk,sysui-studio" clone-depth="1" revision="0f07e8d60ab0aba46129e427101f96ba459a95c1" />
+  <project name="platform/prebuilts/siso" path="prebuilts/siso" groups="pdk" clone-depth="1" revision="41809b921e1888ff851d1094459b1a6875e7f155" />
+  <project name="platform/system/core" path="system/core" groups="pdk" revision="545d2487e38192a2ce25040897ced877cf6b4f53" />
+  <project name="platform/system/extras" path="system/extras" groups="pdk" revision="1289e9b3f282909eec6e80414e14dcc207bda439" />
+  <project name="platform/system/fs/fs_mgr" path="system/fs/fs_mgr" groups="pdk" revision="157112fcbaa00b6e84c63146cfde249c56cd652c" />
+  <project name="platform/system/libbase" path="system/libbase" groups="pdk" revision="fef4173e19d97cd4b4fc09a06bccbf800d0d3937" />
+  <project name="platform/system/logging" path="system/logging" groups="pdk" revision="d35ba620451b28512f46ebb5421f783fd77968d5" />
+  <project name="platform/system/tools/aidl" path="system/tools/aidl" groups="pdk" revision="9a94664f74536bf28010207fd1804b04c6435e2c" />
+  <project name="platform/system/update_engine" path="system/update_engine" groups="pdk" revision="4591637f51644f5429f9e2fe589ab22b92f61842" />
+  <project name="toolchain/pgo-profiles" groups="pdk" clone-depth="1" revision="44bae3346df2d8657cde54a5ee069067d607e689" />
+  <superproject name="platform/superproject" revision="android-latest-release" />
+  <contactinfo bugurl="go/repo-bug" />
+</manifest>

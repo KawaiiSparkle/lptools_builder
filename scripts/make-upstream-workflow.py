@@ -23,9 +23,11 @@ def workflow():
     steps += [
         {"uses": "./.github/actions/prepare"},
         {"name": "Sync official upstream source (no patches)", "shell": "bash", "run": r'''set -euo pipefail
+mkdir -p "$GITHUB_WORKSPACE/build-logs"
 bash scripts/build-linux.sh --ref "$AOSP_REF" --jobs 4 --sync-only \
   --project-list "$GITHUB_WORKSPACE/config/projects-latest.txt" \
-  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist"
+  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist" \
+  2>&1 | tee "$GITHUB_WORKSPACE/build-logs/sync.log"
 '''},
         {"name": "Verify upstream projects are clean before compilation", "shell": "bash", "run": r'''set -euo pipefail
 cd "$GITHUB_WORKSPACE/aosp"
@@ -38,9 +40,11 @@ repo forall --ignore-missing -e -c '
 '
 '''},
         {"name": "Compile upstream Linux tools, verify and package", "shell": "bash", "run": r'''set -euo pipefail
+mkdir -p "$GITHUB_WORKSPACE/build-logs"
 bash scripts/build-linux.sh --ref "$AOSP_REF" --jobs 4 --skip-sync \
   --project-list "$GITHUB_WORKSPACE/config/projects-latest.txt" \
-  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist"
+  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist" \
+  2>&1 | tee "$GITHUB_WORKSPACE/build-logs/build.log"
 '''},
         {"name": "Preserve actual source identity and source status", "if": "always()", "shell": "bash", "run": r'''set -uo pipefail
 mkdir -p "$GITHUB_WORKSPACE/upstream-source"
@@ -79,7 +83,7 @@ exit "$rc"
         {"name": "Upload built tools and source records", "if": "always()", "uses": "actions/upload-artifact@v4",
          "with": {"name": "lp-upstream-linux-x86_64", "compression-level": 0, "if-no-files-found": "warn",
                   "path": "\n".join([
-                      "upstream-source/", "dist/*.tar.gz", "dist/*.sha256",
+                      "upstream-source/", "build-logs/", "dist/*.tar.gz", "dist/*.sha256",
                       "dist/lptools-linux-x86_64/manifest.json",
                       "dist/lptools-linux-x86_64/aosp-manifest.xml"])}},
     ]

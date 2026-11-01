@@ -1,0 +1,115 @@
+{
+  "aosp_branch": "android17-release",
+  "aosp_manifest_revision": "ad156f32caaa06dae91c02d443f6a8fe210eaa54",
+  "aosp_manifest_url": "https://android.googlesource.com/platform/manifest/+/ad156f32caaa06dae91c02d443f6a8fe210eaa54",
+  "aosp_pinned_manifest": {
+    "file": "aosp-manifest.xml",
+    "projects": 41,
+    "sha256": "2700c1f9e1f184652aaf78220743672904b015b5bd7be67713cb4578a1cde931"
+  },
+  "aosp_ref": "android-latest-release",
+  "aosp_tag": "",
+  "build_product": "lptools_host-trunk_staging-eng",
+  "builder": {
+    "branch": "build/upstream",
+    "commit": "da5ed55db5fbc1f0380b3f53b9219008ce960141",
+    "repo_tool": "",
+    "repository": "git@github.com:KawaiiSparkle/lptools_builder.git",
+    "run": ""
+  },
+  "built_at": "2026-11-01T09:27:47Z",
+  "bundle": "lptools",
+  "bundle_version": "android-latest-release",
+  "files": {
+    "aosp-manifest.xml": {
+      "sha256": "2700c1f9e1f184652aaf78220743672904b015b5bd7be67713cb4578a1cde931",
+      "size": 7008
+    },
+    "bin/img2simg": {
+      "sha256": "40413999850d8c4ee47716352dcb612f0a5595c26d0b91849fe2e19568e6392a",
+      "size": 307768
+    },
+    "bin/lpadd": {
+      "sha256": "6769165f11a0adda3a42986451355d7cded57d90d8e5ee103788b12ac1415fbc",
+      "size": 123368
+    },
+    "bin/lpdump": {
+      "sha256": "3d73bb3350df8f3de0dc9d976c0e308a30022d59324f58162448ad7df2cff989",
+      "size": 9080
+    },
+    "bin/lpflash": {
+      "sha256": "f0e4259401f104f953c462dbae7571e61a789a284cbd6ab5a6861116e3d205f1",
+      "size": 43912
+    },
+    "bin/lpmake": {
+      "sha256": "69696aa328eb158d07c50906a5fb901b2847a56c1ec6b703d52630d3249b0415",
+      "size": 182312
+    },
+    "bin/lpunpack": {
+      "sha256": "f55c7e44530d425e084ee10099036a31a59e64833f6883170612cf1dcb5851b5",
+      "size": 185208
+    },
+    "bin/simg2img": {
+      "sha256": "b61f6609e4da68206ad5ad44532a041dfada971f509e0224452edaaf1f8940be",
+      "size": 306576
+    },
+    "lib64/libbase.so": {
+      "sha256": "d5c9ad76028580487b8b68e29952b7f599967c3713b793144c2ce714fe37f651",
+      "size": 849824
+    },
+    "lib64/libc++.so": {
+      "sha256": "acca15da090d439bbd4f6d7bbfb43bd53652639ad20487ea87304c8d00edb306",
+      "size": 1759704
+    },
+    "lib64/libcrypto-host.so": {
+      "sha256": "a3c48ea2eeccecbce50c8364b9f1e75c27976fede3c3d82cedcd4463fb43871d",
+      "size": 5209776
+    },
+    "lib64/libcrypto_utils.so": {
+      "sha256": "54487ad8bc30d34cfbcc7d2539d536af00c539d0dcda0ca538de362d32aa7ac8",
+      "size": 14288
+    },
+    "lib64/libext4_utils.so": {
+      "sha256": "df31e4e902b298213e6a6e78be435f9c7eedeaacd53f0f214887a38710ac7905",
+      "size": 32064
+    },
+    "lib64/liblog.so": {
+      "sha256": "5573468c6d17b6bc9d297c6540ac12611b51cfa5699ec26a5582f7eb55535c9d",
+      "size": 175000
+    },
+    "lib64/liblp.so": {
+      "sha256": "6ad0943c9fcf64e63738d387030282a8567d1e48e0f415cf153dc4535d55ad3c",
+      "size": 872608
+    },
+    "lib64/liblpdump.so": {
+      "sha256": "38f92a8e732704378e1d3b1657eb7d2d07c0f94abcf80f99e709e8da76449c42",
+      "size": 374208
+    },
+    "lib64/libprotobuf-cpp-full-6.33.5.so": {
+      "sha256": "fea7d9479c2c22d839277a0a543383c8ae78ccf5c716c2b17c4543b4ecfd5026",
+      "size": 16738712
+    },
+    "lib64/libsparse-host.so": {
+      "sha256": "61ba57143b2e468c0017654ad25b684956a1c211f7201a28ac9d3f528627fa2a",
+      "size": 99120
+    },
+    "lib64/libz-host.so": {
+      "sha256": "633288a14a2de101cbb4353da563bcedaa1d22c1aa31c8cabce20ac2508ffd2d",
+      "size": 210784
+    }
+  },
+  "host_arch": "x86_64",
+  "kind": "host",
+  "platform": "linux-x86_64",
+  "schema": 2,
+  "target_abi": "",
+  "tools": {
+    "img2simg": "40413999850d8c4ee47716352dcb612f0a5595c26d0b91849fe2e19568e6392a",
+    "lpadd": "6769165f11a0adda3a42986451355d7cded57d90d8e5ee103788b12ac1415fbc",
+    "lpdump": "3d73bb3350df8f3de0dc9d976c0e308a30022d59324f58162448ad7df2cff989",
+    "lpflash": "f0e4259401f104f953c462dbae7571e61a789a284cbd6ab5a6861116e3d205f1",
+    "lpmake": "69696aa328eb158d07c50906a5fb901b2847a56c1ec6b703d52630d3249b0415",
+    "lpunpack": "f55c7e44530d425e084ee10099036a31a59e64833f6883170612cf1dcb5851b5",
+    "simg2img": "b61f6609e4da68206ad5ad44532a041dfada971f509e0224452edaaf1f8940be"
+  }
+}

@@ -8,7 +8,7 @@
 
 | Target | 上游已有能力 | 本项目接下来的实际适配点 |
 |---|---|---|
-| Linux x86_64 | Soong 的 glibc host 工具链；LP host 模块 | 先完成云端编译、运行库打包与制镜像/解包字节比对，保存实际源码 SHA |
+| Linux x86_64 | Soong 的 glibc host 工具链；LP host 模块 | [Codespaces 基线已通过](upstream-baseline.md)：7 个工具、运行库、镜像/sparse 往返及 41 个项目源码清洁检查；工作流继续复验 |
 | Windows x86_64 | `x86_64-pc-windows-gnu` 与 MinGW sysroot；partition_tools 中只有 `lpmake` 显式启用 Windows | 先独立编译上游已开放的 `lpmake`，明确选择 64 位；再逐个开放其他工具和缺少的依赖 variant，并依据编译/运行错误修正 I/O |
 | Linux ARM64 | `linux_musl` 的 `aarch64-linux-musl`；原生 ARM64 host 也会选 musl | 保留 AOSP musl 头文件、CRT 与 `libc_musl` 图，按需加入 `platform/external/musl`；优先核实 x86_64 host 上的交叉选择，不能假定所有预编译构建工具能直接在 ARM64 runner 执行 |
 | macOS ARM64 / x86_64 | Darwin 工具链；ARM64 triple 为 `aarch64-apple-darwin` | 在 macOS runner 上使用受支持的 Xcode SDK；源码树需大小写敏感卷。不能只换 triple 就从 Linux 得到完整 Darwin 安装产物 |
