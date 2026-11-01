@@ -148,6 +148,13 @@ class ArgvTests(TmpDirTest):
         self.assertEqual(len(writer["sha256"]), 64)
         self.assertEqual(writer["flags"], [])
 
+    def test_probe_flags_reports_missing_binary_without_inventing_flags(self):
+        missing = self.tmp / "absent"
+        flags, first = lp.probe_flags(str(missing), 30)
+        self.assertEqual(flags, set())
+        self.assertIn("cannot execute", first)
+        self.assertIn(str(missing), first)
+
     def test_resolve_latest_names_missing_tools(self):
         with self.assertRaises(lp.HarnessError) as caught:
             lp.resolve_latest(self.tmp / "nope")
@@ -572,11 +579,6 @@ class ExecutableProbeTests(TmpDirTest):
         flags, first = lp.probe_flags(exe, 30)
         self.assertEqual(first, "usage: lpmake --sparse --virtual-ab --output")
         self.assertTrue({"--sparse", "--virtual-ab", "--output", "--metadata-size"} <= flags)
-
-    def test_probe_flags_reports_missing_binary_without_inventing_flags(self):
-        flags, first = lp.probe_flags(str(self.tmp / "absent"), 30)
-        self.assertEqual(flags, set())
-        self.assertEqual(first, "")
 
     def test_run_records_nonzero_exit_and_output(self):
         exe = write_script(self.tmp / "lpunpack", 'echo "unknown option --slot" >&2\nexit 64\n')
