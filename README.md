@@ -199,9 +199,30 @@ Windows 的目录名固定为 `windows-x86`，实际 32/64 位由补丁的 `comp
 
 Actions → **Build lptools** → Run workflow：
 
+`aosp_ref` 的可用值可以在 [AOSP 官方 manifest 分支 / 标签列表](https://android.googlesource.com/platform/manifest/+refs)
+中查看，Run workflow 的输入提示也附有这个地址。页面的 **Branches** 和 **Tags** 分别列出
+分支与标签；填写短名称，例如 `main` 或 `android-15.0.0_r1`。
+
+无需下载 AOSP，也可以用 Git 实时查询（仅列出远程引用，不创建本地源码树）：
+
+```bash
+# 所有分支
+git ls-remote --heads https://android.googlesource.com/platform/manifest
+
+# 所有标签，按版本名称倒序排列；--refs 排除 annotated tag 的 ^{} 重复行
+git ls-remote --tags --refs --sort=-version:refname https://android.googlesource.com/platform/manifest
+
+# 只列出 Android 15 的标签；替换通配模式即可筛选其他版本
+git ls-remote --tags --refs --sort=-version:refname https://android.googlesource.com/platform/manifest "refs/tags/android-15.*"
+```
+
+输出每行为 `<SHA> <ref>`，将右侧的 `refs/heads/` 或 `refs/tags/` 前缀去掉后填入
+`aosp_ref`。列表表示该引用存在，不代表当前构建配置已验证支持；当前 Linux / Windows
+x86_64 已验证的基线仍是 `android-15.0.0_r1`。
+
 | 输入 | 默认 | 说明 |
 |---|---|---|
-| `aosp_ref` | `android-15.0.0_r1` | `platform/manifest` 的 tag 或分支，如 `android-15.0.0_r1`、`android-16.0.0_r2`、`main` |
+| `aosp_ref` | `android-15.0.0_r1` | `platform/manifest` 的 tag 或分支；[查看官方可用列表](https://android.googlesource.com/platform/manifest/+refs)，如 `android-15.0.0_r1`、`main` |
 | `product` | `lptools_host` | Linux / Darwin / Windows 构建引导用的 `lunch` 目标；Android 实验脚本按 ABI 选择产品 |
 | `android_abis` | `arm64,arm` | Android 实验目标请求的 ABI；还需 `extra_targets` 包含 `android`，留空则跳过该 job |
 | `check_patches` | 否 | 只跑 Windows 补丁检查，跳过所有构建及发布；首次仍需准备环境与同步源码，不应用补丁 |

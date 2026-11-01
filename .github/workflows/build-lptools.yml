@@ -29,7 +29,9 @@ on:
   workflow_dispatch:
     inputs:
       aosp_ref:
-        description: "platform/manifest ref: tag (android-15.0.0_r1) or branch (main)"
+        description: >-
+          AOSP tag or branch (android-15.0.0_r1 / main).
+          Available refs: https://android.googlesource.com/platform/manifest/+refs
         required: true
         default: "android-15.0.0_r1"
       product:
