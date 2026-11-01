@@ -13,7 +13,7 @@ ref is reported as failed with its compiler log and the matrix keeps going.
     build-historical-writers.py \
         --aosp /srv/android-latest-release \
         --out /srv/historical \
-        --latest-bin /srv/android-latest-release/out/soong/host/linux-x86/bin
+        --latest-bin /srv/android-latest-release/out/host/linux-x86/bin
 
 Outputs:
     <out>/<tag>/bin/lpmake          one executable per ref (fixture writer only)
@@ -648,14 +648,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="compile historical AOSP lpmake writers (unmodified liblp + lpmake.cc)",
         epilog="Linux only. Requires a built latest AOSP tree for clang, libc++ headers and "
-               "the support shared libraries in out/soong/host/linux-x86/lib64.")
+               "the support shared libraries in out/host/linux-x86/lib64.")
     parser.add_argument("--aosp", required=True,
                         help="latest AOSP checkout (build/soong, prebuilts, system/core, ...)")
     parser.add_argument("--out", required=True, help="output root for per-tag writers")
     parser.add_argument("--ref", action="append", default=None,
                         help="AOSP ref to build (repeatable; default android-10..16 r1)")
     parser.add_argument("--latest-bin", default=None,
-                        help="latest lpmake/lpdump/lpunpack bin dir (default: <aosp>/out/soong/"
+                        help="latest lpmake/lpdump/lpunpack bin dir (default: <aosp>/out/"
                              "host/linux-x86/bin)")
     parser.add_argument("--timeout", type=int, default=900, help="per-command timeout seconds")
     args = parser.parse_args(argv)
@@ -663,10 +663,10 @@ def main(argv=None):
     aosp = Path(args.aosp).resolve()
     out = Path(args.out).resolve()
     latest_bin = Path(args.latest_bin).resolve() if args.latest_bin else \
-        aosp / "out/soong/host/linux-x86/bin"
+        aosp / "out/host/linux-x86/bin"
     lib_dir = latest_bin.parent / "lib64"
     if not lib_dir.is_dir():
-        lib_dir = aosp / "out/soong/host/linux-x86/lib64"
+        lib_dir = aosp / "out/host/linux-x86/lib64"
     refs = args.ref or DEFAULT_REFS
     tags, seen = [], set()
     for ref in refs:

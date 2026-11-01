@@ -191,7 +191,7 @@ scripts/build-windows.sh --keep-patches       # 保留补丁供检查
 成功后仅逆向本次应用的补丁，失败时保留现场供检查，`--keep-patches` 则主动保留。
 `--revert-only` 也只逆向精确匹配的补丁并拒绝漂移，不会清空整个工程的修改。
 可顺序复用已同步的树，但不要让 Linux 与 Windows 构建并发操作同一棵树。
-当前 host 构建使用 `--soong-only`，从 `OUT_DIR/soong/host/<os>-<arch>/bin` 收集产物；
+当前 host 构建使用 `--soong-only`，从 `OUT_DIR/host/<os>-<arch>/bin` 收集产物；
 Windows 的目录名固定为 `windows-x86`，实际 32/64 位由补丁的 `compile_multilib` 选择，
 打包时再检查 PE 架构。手工撤回 32 位构建的补丁时也要传 `--arch x86`。
 
@@ -315,7 +315,8 @@ Artifact **lp-upstream-linux-x86_64** 包含 bundle、SHA-256 和来源记录；
 才代表本次 ref 编译成功。其他 target 的适配以这个原版构建结果为基线另行推进。
 
 [scripts/make-upstream-workflow.py](scripts/make-upstream-workflow.py) 生成此入口，
-复用脚本嵌入机制；修改嵌入的脚本后须重新生成。
+复用脚本嵌入机制；修改嵌入的脚本后须重新生成。其他平台的上游能力与分阶段
+适配点见 [target-porting.md](docs/target-porting.md)。
 
 ### 4.7 latest-release 跨版本兼容性验证（独立研究入口）
 

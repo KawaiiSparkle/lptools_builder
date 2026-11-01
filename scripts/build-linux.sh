@@ -190,10 +190,10 @@ build_host() {
   lptools_host_lunch "$PRODUCT" || return $?
   local lunched="$LP_LUNCH_COMBO"
   printf '%s\n' "$lunched" > "$COMBO_FILE"
-  # --soong-only installs below OUT_DIR/soong, not ANDROID_HOST_OUT (Make).
+  # Soong host installations use OUT_DIR/host, including --soong-only builds.
   local install_arch="$ARCH" build_out="${OUT_DIR:-out}" host_bin
   [ "$install_arch" != x86_64 ] || install_arch=x86
-  local host_goal="$build_out/soong/host/$HOST_OS-$install_arch/bin"
+  local host_goal="$build_out/host/$HOST_OS-$install_arch/bin"
   host_bin="$host_goal"
   case "$host_bin" in /*) ;; *) host_bin="$WORK/$host_bin" ;; esac
   printf '%s\n' "$host_bin" > "$HOST_BIN_FILE"

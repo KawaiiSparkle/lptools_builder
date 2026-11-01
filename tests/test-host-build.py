@@ -271,7 +271,7 @@ class HostBuildFixture(unittest.TestCase):
                 esac
                 local build_out="${OUT_DIR:-out}"
                 case "$build_out" in /*) ;; *) build_out="$PWD/$build_out" ;; esac
-                local bin="$build_out/soong/host/windows-x86/bin"
+                local bin="$build_out/host/windows-x86/bin"
                 local bits=64
                 [ "$HOST_ARCH" != x86 ] || bits=32
                 grep -q 'compile_multilib: "'"$bits"'", // lptools Windows bitness' system/extras/subject.txt || return 98
@@ -288,7 +288,7 @@ class HostBuildFixture(unittest.TestCase):
                 local build_out="${OUT_DIR:-out}"
                 local arch="${MOCK_NATIVE_ARCH:-x86_64}"
                 case "$arch" in x86_64) arch=x86 ;; aarch64) arch=arm64 ;; esac
-                local host_out="$build_out/soong/host/linux-$arch"
+                local host_out="$build_out/host/linux-$arch"
                 local goal
                 for goal in "${@:2}"; do
                   case "$goal" in "$host_out/bin/"*) ;; *) return 92 ;; esac
@@ -480,13 +480,13 @@ class LinuxHostBuildTest(HostBuildFixture):
                         self.output.index("fixture setup completed"), self.output)
         manifest = self.assert_package("linux-x86_64")
         self.assertEqual(manifest["host_arch"], "x86_64")
-        host_goal = "custom build artifacts/soong/host/linux-x86/bin/"
+        host_goal = "custom build artifacts/host/linux-x86/bin/"
         self.assertEqual(self.rows("m")[0][5:],
                          [host_goal + tool for tool in
                           ("lpmake", "lpdump", "lpunpack", "simg2img", "img2simg")])
         self.assertEqual([row[5:] for row in self.rows("m")[1:]],
                          [[host_goal + "lpadd"], [host_goal + "lpflash"]])
-        expected = self.work / "custom build artifacts/soong/host/linux-x86/bin/lpmake"
+        expected = self.work / "custom build artifacts/host/linux-x86/bin/lpmake"
         self.assertTrue(expected.is_file(), self.output)
         self.assertEqual((self.out / "lptools-linux-x86_64/bin/lpmake").read_bytes(),
                          expected.read_bytes())
@@ -498,7 +498,7 @@ class LinuxHostBuildTest(HostBuildFixture):
             MOCK_ABSOLUTE_OUT=1, MOCK_FILE_DESCRIPTION="ELF 64-bit LSB executable, aarch64"),
             0, self.output)
         self.assert_package("linux-arm64")
-        self.assertTrue((self.work / "absolute build artifacts/soong/host/linux-arm64/bin/lpmake").is_file())
+        self.assertTrue((self.work / "absolute build artifacts/host/linux-arm64/bin/lpmake").is_file())
 
     def test_envsetup_failure_preserves_status(self):
         self.assertEqual(self.run_build("linux", MOCK_SOURCE_RC=17), 17, self.output)
@@ -614,7 +614,7 @@ class WindowsHostBuildTest(HostBuildFixture):
         self.assertEqual(first[4], "-j2", self.trace)
         for goal, tool in zip(first[5:], ("lpmake", "lpdumps", "lpunpack")):
             self.assertEqual(
-                goal, f"custom build artifacts/soong/host/windows-x86/bin/{tool}.exe")
+                goal, f"custom build artifacts/host/windows-x86/bin/{tool}.exe")
         self.assertEqual(calls[1][1:3], ["windows", "x86_64"], self.trace)
         self.assertEqual(calls[1][4:], ["-j2", "lpmake", "lpdumps", "lpunpack"], self.trace)
         self.assertIn("retrying with module names", self.output)
@@ -633,7 +633,7 @@ class WindowsHostBuildTest(HostBuildFixture):
         goals = self.rows("m")[0][5:]
         self.assertEqual(len(goals), 3, self.trace)
         for goal in goals:
-            self.assertIn("/source tree/absolute build artifacts/soong/host/windows-x86/bin/", goal)
+            self.assertIn("/source tree/absolute build artifacts/host/windows-x86/bin/", goal)
         self.assert_patch_contents(False)
         self.assert_package("windows-x86")
 

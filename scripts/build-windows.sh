@@ -11,7 +11,7 @@
 #
 # Soong already ships the whole mechanism: the mingw-w64 toolchain lives in
 # prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8 and Windows host-cross
-# --soong-only variants install under out/soong/host/windows-x86/bin.
+# --soong-only variants install under out/host/windows-x86/bin.
 # The patch set explicitly selects 32/64 bits; Soong prefers 32 bits by default.
 #
 #   scripts/build-windows.sh                    # full build, default AOSP tag
@@ -261,7 +261,7 @@ build_windows() {
   # OUT_DIR is a build-system setting; lunch may also set a shell variable OUT.
   local build_out="${OUT_DIR:-out}"
   # Soong uses windows-x86 for both Windows bitnesses. The patches select one.
-  local host_goal="$build_out/soong/host/windows-x86/bin"
+  local host_goal="$build_out/host/windows-x86/bin"
   local host_bin="$host_goal"
   case "$host_bin" in /*) ;; *) host_bin="$WORK/$host_bin" ;; esac
   printf '%s\n' "$host_bin" > "$HOST_BIN_FILE"
