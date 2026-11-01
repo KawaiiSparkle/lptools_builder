@@ -16,10 +16,12 @@ project was never synced, and forall visiting only the projects that have a
 checkout. Git is the real git, on real local repositories. No network, no repo
 installation.
 """
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
@@ -459,6 +461,75 @@ printf 'REACHED-AFTER-EXPORT\\n'
         self.assertEqual(self.fields(result)["PROJECTS"], "1")
         self.assertNotIn("unsynced project", result.stdout)
 
+
+    def test_unverifiable_requested_ref_records_no_branch_or_tag(self):
+        # No <default revision> and no branch.default.merge in the checkout: the
+        # requested name matches no ref, so nothing may be guessed for it.
+        self.write_manifest("""<manifest>
+  <remote name="aosp" fetch=".."/>
+  <project name="platform/build" path="build"/>
+</manifest>
+""")
+        self.manifest_checkout()
+        self.synced_project("build")
+        result = self.export(requested="android15-release")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        fields = self.fields(result)
+        self.assertEqual(fields["BRANCH"], "")
+        self.assertEqual(fields["TAG"], "")
+        self.assertIn("matches no ref", result.stdout)
+        self.assertEqual(fields["PROJECTS"], "1")
+
+    def test_exported_fields_feed_the_bundle_manifest(self):
+        # scripts/make-manifest.py rejects an empty or half-pinned record, so a
+        # successful package here proves the exported values are self-consistent.
+        self.write_manifest(MANIFEST_HEAD + """  <project name="platform/build" path="build"/>
+  <project name="platform/system/core" path="system/core"/>
+</manifest>
+""")
+        manifest_rev = self.manifest_checkout("refs/tags/android-15.0.0_r1")
+        sha = self.synced_project("build")
+        result = self.export()
+        self.assertEqual(result.returncode, 0, result.stdout)
+        fields = self.fields(result)
+        (self.bundle / "bin").mkdir()
+        (self.bundle / "bin" / "lpmake").write_text("tool\n", encoding="utf-8")
+        packager = ROOT / "scripts" / "make-manifest.py"
+        packed = subprocess.run(
+            [sys.executable, str(packager), "--dir", str(self.bundle),
+             "--aosp-ref", "android-15.0.0_r1",
+             "--aosp-branch", fields["BRANCH"],
+             "--aosp-tag", fields["TAG"],
+             "--aosp-manifest-rev", fields["REV"],
+             "--aosp-pinned-projects", fields["PROJECTS"]],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        self.assertEqual(packed.returncode, 0, packed.stdout)
+        manifest = json.loads((self.bundle / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["aosp_ref"], "android-15.0.0_r1")
+        self.assertEqual(manifest["aosp_tag"], "android-15.0.0_r1")
+        self.assertEqual(manifest["aosp_manifest_revision"], manifest_rev)
+        self.assertEqual(manifest["aosp_pinned_manifest"]["projects"], 1)
+        self.assertEqual(manifest["aosp_pinned_manifest"]["file"], "aosp-manifest.xml")
+        self.assertEqual(self.pinned_projects(), {"build": sha})
+
+    def test_bare_default_revision_uses_repo_fetched_ref_kind(self):
+        # A manifest may spell the revision without a refs/ prefix. repo records
+        # what it actually fetched (refs/heads/main) in branch.default.merge;
+        # that same name is evidence for calling it a branch, not a guess.
+        self.write_manifest("""<manifest>
+  <remote name="aosp" fetch=".."/>
+  <default revision="main" remote="aosp"/>
+  <project name="platform/build" path="build"/>
+</manifest>
+""")
+        self.manifest_checkout("refs/heads/main")
+        self.synced_project("build")
+        result = self.export(requested="main")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        fields = self.fields(result)
+        self.assertEqual(fields["BRANCH"], "main")
+        self.assertEqual(fields["TAG"], "")
+        self.assertNotIn("matches no ref", result.stdout)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
