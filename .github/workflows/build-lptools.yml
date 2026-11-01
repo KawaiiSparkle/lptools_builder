@@ -339,8 +339,14 @@ jobs:
             (cd dist && sha256sum --check "$bundle.$suffix.sha256")
           done
           python3 - <<'PY'
+          import hashlib
           import json
+          import sys
           from pathlib import Path
+
+          sys.path.insert(0, "scripts")
+          from importlib import import_module
+          validate_pinned_manifest = import_module("make-manifest").validate_pinned_manifest
 
           for platform in ("linux-x86_64", "windows-x86_64"):
               root = Path("dist") / ("lptools-" + platform)
@@ -350,8 +356,12 @@ jobs:
                       or not manifest.get("tools")):
                   raise SystemExit("invalid required manifest: " + str(root))
               pinned = manifest.get("aosp_pinned_manifest") or {}
-              if pinned.get("sha256") and not (root / "aosp-manifest.xml").is_file():
+              source = root / "aosp-manifest.xml"
+              if pinned.get("file") != source.name:
                   raise SystemExit("missing recorded pinned manifest: " + str(root))
+              validate_pinned_manifest(source, pinned.get("projects"))
+              if hashlib.sha256(source.read_bytes()).hexdigest() != pinned.get("sha256"):
+                  raise SystemExit("pinned manifest checksum mismatch: " + str(root))
           PY
 
       - name: Generate release notes from the manifests

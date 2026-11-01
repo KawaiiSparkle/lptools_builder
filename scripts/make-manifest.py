@@ -20,7 +20,9 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
+import xml.etree.ElementTree as ET
 
 
 def sha256(path):
@@ -37,6 +39,25 @@ def bundle_kind(platform):
     if platform.startswith("windows-"):
         return "windows"
     return "host"
+
+
+def validate_pinned_manifest(path, expected_projects):
+    """Reject empty or unpinned source records before packaging."""
+    if not str(expected_projects).isdigit() or int(expected_projects) <= 0:
+        raise ValueError("pinned project count must be a positive integer")
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as exc:
+        raise ValueError("cannot read pinned AOSP manifest: " + str(exc)) from exc
+    projects = root.findall("project")
+    if root.tag != "manifest" or not projects or root.findall("include"):
+        raise ValueError("pinned AOSP manifest must contain resolved projects")
+    if len(projects) != int(expected_projects):
+        raise ValueError("pinned AOSP project count does not match manifest")
+    for project in projects:
+        if not project.get("name") or not re.fullmatch(r"[0-9a-fA-F]{40}", project.get("revision", "")):
+            raise ValueError("AOSP project is not pinned to a full commit: " + str(project.attrib))
+    return len(projects)
 
 
 def main(argv):
@@ -77,11 +98,16 @@ def main(argv):
         return 1
 
     pinned_file = "aosp-manifest.xml"
-    projects = str(args.aosp_pinned_projects or "0").strip() or "0"
+    try:
+        projects = validate_pinned_manifest(os.path.join(root, pinned_file),
+                                           args.aosp_pinned_projects)
+    except ValueError as exc:
+        print("error: " + str(exc), file=sys.stderr)
+        return 1
     pinned = {
-        "file": pinned_file if pinned_file in files else "",
-        "projects": int(projects) if projects.isdigit() else 0,
-        "sha256": files.get(pinned_file, {}).get("sha256", ""),
+        "file": pinned_file,
+        "projects": projects,
+        "sha256": files[pinned_file]["sha256"],
     }
 
     platform = args.platform

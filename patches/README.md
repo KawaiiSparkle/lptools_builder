@@ -8,6 +8,7 @@
 
 `0001`–`0003` 取自 [Rprop/aosp15_partition_tools](https://github.com/Rprop/aosp15_partition_tools)
 （Apache-2.0，AOSP 派生物），针对 `android-15.0.0_r25` 生成。
+保留补丁来源说明；帮助文本保持 AOSP 原样，不注入固定版本或构建者。实际来源以包内 manifest 为准。
 `0001` 里额外新增的 `lpdumps` 目标就是把 `lpdump.cc` 重新声明成一个不含
 `liblpdump` / `libbinder` 的纯静态 host 二进制——Linux 版的 `lpdump` 走的是
 

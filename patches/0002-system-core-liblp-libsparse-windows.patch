@@ -101,15 +101,6 @@ diff --git a/libsparse/append2simg.cpp b/libsparse/append2simg.cpp
 index d3a43a885..457cf9f09 100644
 --- a/libsparse/append2simg.cpp
 +++ b/libsparse/append2simg.cpp
-@@ -41,7 +41,7 @@
- #endif
- 
- void usage() {
--  fprintf(stderr, "Usage: append2simg <output> <input>\n");
-+  fprintf(stderr, "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\nUsage: append2simg <output> <input>\n");
- }
- 
- int main(int argc, char* argv[]) {
 @@ -67,7 +67,12 @@ int main(int argc, char* argv[]) {
      exit(EXIT_FAILURE);
    }
@@ -123,29 +114,3 @@ index d3a43a885..457cf9f09 100644
    if (ret < 0) {
      fprintf(stderr, "Couldn't allocate filename\n");
      exit(EXIT_FAILURE);
-diff --git a/libsparse/img2simg.cpp b/libsparse/img2simg.cpp
-index c390506af..891ca87b6 100644
---- a/libsparse/img2simg.cpp
-+++ b/libsparse/img2simg.cpp
-@@ -38,7 +38,7 @@
- #endif
- 
- void usage() {
--  fprintf(stderr, "Usage: img2simg [-s] <raw_image_file> <sparse_image_file> [<block_size>]\n");
-+  fprintf(stderr, "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\nUsage: img2simg [-s] <raw_image_file> <sparse_image_file> [<block_size>]\n");
- }
- 
- int main(int argc, char* argv[]) {
-diff --git a/libsparse/simg2img.cpp b/libsparse/simg2img.cpp
-index 2301a83d0..04244bacd 100644
---- a/libsparse/simg2img.cpp
-+++ b/libsparse/simg2img.cpp
-@@ -30,7 +30,7 @@
- #endif
- 
- void usage() {
--  fprintf(stderr, "Usage: simg2img <sparse_image_files> <raw_image_file>\n");
-+  fprintf(stderr, "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\nUsage: simg2img <sparse_image_files> <raw_image_file>\n");
- }
- 
- int main(int argc, char* argv[]) {

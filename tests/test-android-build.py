@@ -37,9 +37,18 @@ class AndroidBuildTest(unittest.TestCase):
                      "aosp-lunch.sh", "make-manifest.py"):
             shutil.copyfile(ROOT / "scripts" / name, scripts / name)
         self.put("source tree/.repo/manifest.xml",
-                 '<manifest><default revision="mock-branch"/></manifest>\n')
+                 '<manifest><default revision="refs/tags/android-15.0.0_r1"/></manifest>\n')
+        self.put("source tree/.repo/manifests/default.xml", "<manifest/>\n")
         self.put("mock-bin/uname", "#!/usr/bin/env bash\nprintf 'Linux\\n'\n")
-        self.put("mock-bin/git", "#!/usr/bin/env bash\nprintf 'mock-builder\\n'\n")
+        self.put("mock-bin/git", r'''
+            #!/usr/bin/env bash
+            case "$*" in
+              *"config --get branch.default.merge") printf 'refs/tags/android-15.0.0_r1\n' ;;
+              *"rev-parse --abbrev-ref HEAD") printf 'mock-builder\n' ;;
+              *"rev-parse HEAD") printf '0123456789012345678901234567890123456789\n' ;;
+              *) exit 1 ;;
+            esac
+        ''')
         self.put("mock-bin/python3", "#!/usr/bin/env bash\nexec " +
                  shlex.quote(Path(sys.executable).as_posix()) + ' "$@"\n')
         self.put("mock-bin/readelf", r'''
@@ -50,14 +59,21 @@ class AndroidBuildTest(unittest.TestCase):
             #!/usr/bin/env bash
             set -eu
             if [ "${1:-}" = --version ]; then echo 'repo version mock'; exit 0; fi
-            [ "$1" = manifest ] || exit 98
-            while [ $# -gt 0 ]; do
-              if [ "$1" = -o ]; then output=$2; break; fi
-              shift
-            done
-            case "$output" in /*) ;; *) exit 97 ;; esac
-            printf 'manifest:%s:%s\n' "$PWD" "$output" >> "$TRACE"
-            printf '<manifest><project name="mock" revision="123"/></manifest>\n' > "$output"
+            case "$1" in
+              manifest)
+                while [ $# -gt 0 ]; do
+                  if [ "$1" = -o ]; then output=$2; break; fi
+                  shift
+                done
+                case "$output" in /*) ;; *) exit 97 ;; esac
+                printf 'manifest:%s:%s\n' "$PWD" "$output" >> "$TRACE"
+                printf '<manifest><default revision="refs/tags/android-15.0.0_r1"/><project name="mock"/></manifest>\n' > "$output"
+                ;;
+              forall)
+                printf 'mock\tmock\taosp\t0123456789012345678901234567890123456789\n'
+                ;;
+              *) exit 98 ;;
+            esac
         ''')
         self.put("fixture/scripts/build-linux.sh", r'''
             #!/usr/bin/env bash

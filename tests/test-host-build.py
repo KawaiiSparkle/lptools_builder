@@ -90,12 +90,13 @@ class HostBuildFixture(unittest.TestCase):
         self.put("fixture/required-projects.txt",
                  "# Fixture projects only\nsystem/extras\nsystem/core\nexternal/e2fsprogs\n")
         self.put("source tree/.repo/manifest.xml",
-                 '<manifest><default revision="mock-branch"/></manifest>\n')
+                 '<manifest><default revision="refs/heads/mock-branch"/></manifest>\n')
         manifest_repo = self.work / ".repo/manifests"
         self.put("source tree/.repo/manifests/default.xml",
-                 '<manifest><default revision="mock-branch"/></manifest>\n')
+                 '<manifest><default revision="refs/heads/mock-branch"/></manifest>\n')
         self.init_repo(manifest_repo)
         self.git(manifest_repo, "tag", "fixture-manifest-tag")
+        self.git(manifest_repo, "config", "branch.default.merge", "refs/heads/mock-branch")
         self.manifest_revision = self.git(manifest_repo, "rev-parse", "HEAD").strip()
         self.put("mock-bin/python3", "#!/usr/bin/env bash\nexec " +
                  shlex.quote(Path(sys.executable).as_posix()) + ' \"$@\"\n')
@@ -143,12 +144,23 @@ class HostBuildFixture(unittest.TestCase):
                 case "$output" in /*) ;; *) exit 93 ;; esac
                 printf 'manifest\t%s\t%s\n' "$PWD" "$output" >> "$TRACE"
                 {
-                  printf '<manifest>\n'
+                  printf '<manifest><default revision="refs/heads/mock-branch"/>\n'
                   for project in system/extras system/core external/e2fsprogs; do
                     printf '  <project name="%s" revision="0123456789012345678901234567890123456789"/>\n' "$project"
                   done
                   printf '</manifest>\n'
                 } > "$output"
+                ;;
+              forall)
+                printf 'forall\t%s\n' "$PWD" >> "$TRACE"
+                for project in system/extras system/core external/e2fsprogs; do
+                  if [ -d "$project/.git" ]; then
+                    revision=$(git -C "$project" rev-parse HEAD)
+                  else
+                    revision=0123456789012345678901234567890123456789
+                  fi
+                  printf '%s\t%s\t%s\t%s\n' "$project" "$project" aosp "$revision"
+                done
                 ;;
               *) printf 'forbidden repo command: %s\n' "$*" >&2; exit 94 ;;
             esac
@@ -396,7 +408,8 @@ class HostBuildFixture(unittest.TestCase):
         self.assertEqual(manifest["platform"], platform)
         self.assertEqual(manifest["build_product"], product)
         self.assertEqual(manifest["aosp_branch"], "mock-branch")
-        self.assertEqual(manifest["aosp_tag"], "fixture-manifest-tag")
+        self.assertEqual(manifest["aosp_tag"], "")
+        self.assertEqual(len(self.rows("forall")), 1, self.trace)
         self.assertEqual(manifest["aosp_manifest_revision"], self.manifest_revision)
         self.assertEqual(manifest["aosp_pinned_manifest"]["projects"], 3)
         self.assertEqual(len(self.rows("manifest")), 1, self.trace)

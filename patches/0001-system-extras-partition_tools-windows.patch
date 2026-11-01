@@ -139,7 +139,7 @@ index b2b1c74f..f11f13e7 100644
  #include <unistd.h>
  
  #include <iostream>
-@@ -34,9 +36,34 @@ using android::fs_mgr::ReadMetadata;
+@@ -34,9 +36,33 @@ using android::fs_mgr::ReadMetadata;
  using android::fs_mgr::UpdatePartitionTable;
  using SparsePtr = std::unique_ptr<sparse_file, decltype(&sparse_file_destroy)>;
  
@@ -170,11 +170,10 @@ index b2b1c74f..f11f13e7 100644
  std::optional<TemporaryDir> gTempDir;
  
  static int usage(const char* program) {
-+    std::cerr << "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\n";
      std::cerr << program << " - command-line tool for adding partitions to a super.img\n";
      std::cerr << "\n";
      std::cerr << "Usage:\n";
-@@ -190,7 +217,7 @@ bool SuperHelper::AddPartition(const std::string& partition_name, const std::str
+@@ -190,7 +216,7 @@ bool SuperHelper::AddPartition(const std::string& partition_name, const std::str
      unique_fd raw_image_fd;
      std::optional<TemporaryFile> temp_image;
      if (!image_path.empty()) {
@@ -183,7 +182,7 @@ index b2b1c74f..f11f13e7 100644
          if (raw_image_fd < 0) {
              std::cerr << "open failed: " << image_path << ": " << strerror(errno) << "\n";
              return false;
-@@ -230,7 +257,7 @@ bool SuperHelper::AddPartition(const std::string& partition_name, const std::str
+@@ -230,7 +256,7 @@ bool SuperHelper::AddPartition(const std::string& partition_name, const std::str
  bool SuperHelper::OpenSuperFile() {
      auto actual_path = super_path_;
  
@@ -192,7 +191,7 @@ index b2b1c74f..f11f13e7 100644
      if (output_fd_ < 0) {
          std::cerr << "open failed: " << actual_path << ": " << strerror(errno) << "\n";
          return false;
-@@ -247,7 +274,7 @@ bool SuperHelper::OpenSuperFile() {
+@@ -247,7 +273,7 @@ bool SuperHelper::OpenSuperFile() {
  
      // PartitionOpener will decorate relative paths with /dev/block/by-name
      // so get an absolute path here.
@@ -235,21 +234,8 @@ index 1d498883..cc594d86 100644
 +#endif
 +
  static int usage(int /* argc */, char* argv[], std::ostream& cerr) {
--    cerr << argv[0]
-+    cerr << "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\n" << argv[0]
+     cerr << argv[0]
           << " - command-line tool for dumping Android Logical Partition images.\n"
-             "\n"
-             "Usage:\n"
-diff --git a/partition_tools/lpmake.cc b/partition_tools/lpmake.cc
-index d7085222..a67c1e35 100644
---- a/partition_tools/lpmake.cc
-+++ b/partition_tools/lpmake.cc
-@@ -52,6 +52,7 @@ static constexpr int O_BINARY = 0;
- /* Prints program usage to |where|. */
- static int usage(int /* argc */, char* argv[]) {
-     fprintf(stderr,
-+            "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\n"
-             "%s - command-line tool for creating Android Logical Partition images.\n"
              "\n"
              "Usage:\n"
 diff --git a/partition_tools/lpunpack.cc b/partition_tools/lpunpack.cc
@@ -297,15 +283,7 @@ index 696d3f25..961329aa 100644
  class ImageExtractor final {
    public:
      ImageExtractor(std::vector<unique_fd>&& image_fds, std::unique_ptr<LpMetadata>&& metadata,
-@@ -77,6 +103,7 @@ class SparseWriter final {
- /* Prints program usage to |where|. */
- static int usage(int /* argc */, char* argv[]) {
-     fprintf(stderr,
-+            "Modified version from android-15.0.0_r25 built by Rprop (https://github.com/Rprop)\n\n"
-             "%s - command-line tool for extracting partition images from super\n"
-             "\n"
-             "Usage:\n"
-@@ -155,12 +182,12 @@ int main(int argc, char* argv[]) {
+@@ -155,12 +181,12 @@ int main(int argc, char* argv[]) {
          // Done reading arguments; open super.img. PartitionOpener will decorate
          // relative paths with /dev/block/by-name, so get an absolute path here.
          std::string abs_super_path;
@@ -320,7 +298,7 @@ index 696d3f25..961329aa 100644
          if (fd < 0) {
              std::cerr << "open failed: " << abs_super_path << ": " << strerror(errno) << "\n";
              return EX_OSERR;
-@@ -257,7 +284,7 @@ bool ImageExtractor::ExtractPartition(const LpMetadataPartition* partition) {
+@@ -257,7 +283,7 @@ bool ImageExtractor::ExtractPartition(const LpMetadataPartition* partition) {
  
      // Make a temporary file so we can import it with sparse_file_read.
      std::string output_path = output_dir_ + "/" + GetPartitionName(*partition) + ".img";

@@ -5,9 +5,11 @@
 > simg2img / img2simg 的构建、冒烟检查、**清单与哈希**打包及发布流程，
 > 供下游（imgpatchtools-rs、脚本、CI）取用。
 
-**验证边界**：目前未完成真实 AOSP 构建，也没有 CI 性能基准；下文描述的是脚本和
-workflow 的行为，不能据此保证某个平台已产出可用二进制、构建耗时、无 OOM，或重复
-构建逐字节一致。下载时请以实际 Release 资产及其清单为准。
+**已验证范围**：以 `android-15.0.0_r1` 构建的 Linux x86_64 和 Windows x86_64
+已通过[真实云端构建 #13](https://github.com/KawaiiSparkle/lptools_builder/actions/runs/41252581019)。
+Linux 完成镜像往返冒烟测试；Windows 下载产物也完成原生 raw / sparse 镜像及
+`imgpatchtools-rs` 配套往返字节比对。其他架构与源码 ref 仍需分别验证；当前没有
+冷树 / 热树性能基准，也不保证重复构建逐字节一致。
 
 ## 1. 为什么需要这个仓库
 
@@ -21,7 +23,7 @@ LP（Logical Partition）元数据是 AOSP 单方面演进的（v10.0 → v10.1 
 
 ## 2. 构建入口与资源准备
 
-当前脚本针对以下配置问题设置了入口与检查；这些调整不代表真实 AOSP 构建已经通过：
+当前脚本针对以下配置问题设置了入口与检查：
 
 | # | 问题 | 后果 | 现在 |
 |---|---|---|---|
@@ -43,9 +45,9 @@ repo init --depth=1 (manifest 元数据)
    └─ tools/check_projects.py      ← 校验 required-projects.txt 中的项目是否在 manifest 中
 repo sync -c --optimized-fetch --prune --fail-fast <所需项目集>
    └─ source build/envsetup.sh && lunch <候选产品>
-   └─ m lpmake lpdump lpunpack simg2img img2simg   ← 调用所选源码树的 Soong
+   └─ m --soong-only <host 安装路径>             ← 只请求所需 host 工具
    └─ scripts/smoke-test.sh        ← host 构建默认检查制镜像 / 解包往返及字节比对
-   └─ repo manifest -r -o aosp-manifest.xml        ← 导出成功时记录各项目提交
+   └─ repo manifest + forall --ignore-missing     ← 固化已同步项目的实际 HEAD
    └─ scripts/make-manifest.py     ← manifest.json + SHA256SUMS
    └─ tar.gz / zip → artifact → 满足门禁且请求发布时进入 Release
 ```
@@ -73,8 +75,8 @@ workflow 配置的目标矩阵（文件名是预期产物，尚不表示已构�
 `windows` 都为 `success`、未启用 `check_patches`，并由 tag push 或手动
 `publish: true` 请求发布时才进入发布阶段。发布前还会检查 `linux-x86_64`、
 `windows-x86_64` 两份 bundle 的压缩包、同名 `.sha256` 和
-`manifest.json`，校验压缩包哈希及清单的基本字段；清单记录了固化 manifest 的哈希时，
-也必须有对应文件。实验 job 失败不阻止满足上述条件的发布；Linux ARM64 / Darwin 使用
+`manifest.json`，校验压缩包哈希及清单的基本字段；固化 manifest 必须存在、项目数为
+正、逐项目记录完整提交号，且实际文件哈希与记录一致。实验 job 失败不阻止满足上述条件的发布；Linux ARM64 / Darwin 使用
 `continue-on-error`，Android 的失败结果则由显式 release 门禁排除。Release notes 只
 汇总下载到的清单与资产，**没有 job 失败报告**，失败详情仍需查看 Actions。
 
@@ -88,10 +90,10 @@ ARM64 runner 上执行；Linux ARM64 需要另行移植构建链，Darwin 的完
 服务。因此 Android 目标需要额外的 device 模块移植及依赖适配；仅换 `lunch` 或 ABI
 不会得到独立设备工具，也不能保证在设备 / Termux 运行。
 
-来源信息（哪个 AOSP 提交、哪个分支、哪次构建）由脚本现场采集，不写死：branch 从
-`.repo/manifest.xml` 的 `<default revision=...>` 读，commit 从 `.repo/manifests` 的
-git 读；`repo manifest -r` 导出成功时将 `aosp-manifest.xml` 一起打包。缺失信息可能为空，
-固化项目数可能为 0；这些字段用于溯源，不保证二进制可复现。详见 4.5 节。
+来源信息（哪个 AOSP 提交、哪个分支或 tag、哪次构建）由脚本现场采集：合并 manifest
+并读取 manifest 仓库实际 fetch 的 ref；用 `repo forall --ignore-missing` 枚举已同步
+项目，将其 HEAD 固化到 `aosp-manifest.xml`。来源清单无效时构建失败，不再生成
+零项目的空记录。这些字段用于溯源，不保证二进制可复现。详见 4.5 节。
 
 ## 4. 快速开始
 
@@ -265,14 +267,15 @@ Release 说明里的三张表都是机器从产物里读出来的，没有手写
 
 | 表 | 内容 | 数据来源 |
 |---|---|---|
-| AOSP source | 请求的 ref、实际 fetch 的分支、tag、manifest 提交、固化项目数、`aosp-manifest.xml` 的 SHA-256 | `.repo/manifest.xml`、`.repo/manifests` 的 git、`repo manifest -r` |
+| AOSP source | 请求的 ref、实际 fetch 的分支或 tag、manifest 提交、固化项目数、`aosp-manifest.xml` 的 SHA-256 | `repo manifest` 合并清单、`.repo/manifests` 的 git、已同步项目的实际 HEAD |
 | Builder | lptools_builder 的仓库、提交、分支、run 链接 | `GITHUB_SHA` / `GITHUB_REF_NAME` / `GITHUB_RUN_ID` |
 | Bundles | 每个平台的文件名、工具清单、SHA-256 | 各 bundle 的 `manifest.json` |
 
 同样的数据也在产物本地：解压后 `manifest.json` 的 `aosp_branch` / `aosp_tag` /
-`aosp_manifest_revision` / `aosp_pinned_manifest` 就是这几项。若成功导出
-`aosp-manifest.xml`，可据其中的项目提交追溯源码；缺失时应检查清单与日志。这些来源
-记录不包含完整环境，也不能证明重建会得到逐字节相同的二进制。
+`aosp_manifest_revision` / `aosp_pinned_manifest` 就是这几项。`aosp-manifest.xml`
+必须包含本次实际同步项目的完整提交号；导出失败、空清单或哈希不符会阻止打包或发布。
+按 tag 构建时允许分支字段为空，不把 repo 的本地 `default` 分支当作上游分支。
+这些来源记录不包含完整环境，也不能证明重建会得到逐字节相同的二进制。
 
 ## 5. 产物契约（给 imgpatchtools-rs 用）
 
@@ -285,7 +288,7 @@ lptools-linux-x86_64/
 ├── [lib/]            # 存在时一并收集，链接解引用以脱离构建目录
 ├── manifest.json     # 本次构建记录的版本与文件哈希
 ├── SHA256SUMS
-└── [aosp-manifest.xml] # 导出成功时包含
+└── aosp-manifest.xml  # 必需：已同步项目逐一固化到实际提交
 ```
 
 Windows 版使用相同的元数据布局，`platform` 为 `windows-x86_64`，二进制带 `.exe`，
@@ -300,7 +303,7 @@ lptools-windows-x86_64.zip
     │   └── [simg2img.exe]  [img2simg.exe]  [ext2simg.exe]  [append2simg.exe]
     ├── manifest.json
     ├── SHA256SUMS
-    └── [aosp-manifest.xml]
+    └── aosp-manifest.xml
 ```
 
 `manifest.json`（`schema: 2`）：
@@ -310,9 +313,9 @@ lptools-windows-x86_64.zip
 | `bundle` / `bundle_version` / `platform` | 产物标识，如 `lptools` / `android-15.0.0_r1` / `linux-x86_64` |
 | `kind` / `host_arch` / `target_abi` | 产物种类（`host` / `windows` / `android`）与架构 |
 | `aosp_ref` | 请求的 ref（tag 或分支），CI 的 `aosp_ref` 输入 |
-| `aosp_branch` / `aosp_tag` | 实际 sync 的分支（取自 `<default revision>`）与精确 tag（若在 tag 上） |
+| `aosp_branch` / `aosp_tag` | 从合并清单和 manifest 仓库的实际 fetch ref 解析；tag 构建不虚构分支名 |
 | `aosp_manifest_revision` / `aosp_manifest_url` | manifest 仓库的提交与来源，用于溯源；不能单独固化所有项目或构建环境 |
-| `aosp_pinned_manifest` | `{file, projects, sha256}`：逐项目固化清单的文件名、项目数与 SHA-256；导出失败时项目数可能为 0 |
+| `aosp_pinned_manifest` | `{file, projects, sha256}`：已同步项目固化清单的文件名、正项目数与 SHA-256；缺失或无效时构建失败 |
 | `build_product` | 本次 `lunch` 目标；host / Windows 用于构建引导，Android 对应尝试构建的设备产品 |
 | `builder.commit` / `builder.branch` / `builder.run` | 构建脚本自身的版本与 CI run |
 | `tools.<name>` | 每个二进制的 SHA-256 |

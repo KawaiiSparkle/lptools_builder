@@ -265,7 +265,7 @@ fi
 # --- 6. manifest + package --------------------------------------------------
 group_start "package (manifest + tarball)"
 log "recording AOSP provenance (branch / tag / pinned manifest)"
-lptools_export_meta "$WORK" "$BUNDLE"
+lptools_export_meta "$WORK" "$BUNDLE" "$REF"
 REPO_VERSION=$(repo --version 2>/dev/null | awk "/repo version/ {print \$3}" || true)
 BUILDER_SHA=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
 BUILDER_REF=$(git -C "$ROOT" remote get-url origin 2>/dev/null || echo unknown)

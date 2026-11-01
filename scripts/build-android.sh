@@ -181,7 +181,7 @@ for abi in $(echo "$ABIS" | tr "," " "); do
 
   group_end
   group_start "package android-$abi"
-  lptools_export_meta "$WORK" "$BUNDLE"
+  lptools_export_meta "$WORK" "$BUNDLE" "$REF"
 
   log "writing manifest for android-$abi (AOSP branch: ${AOSP_BRANCH:-unknown})"
   python3 "$ROOT/scripts/make-manifest.py" \
