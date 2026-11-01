@@ -301,6 +301,38 @@ Release 说明里的三张表都是机器从产物里读出来的，没有手写
 按 tag 构建时允许分支字段为空，不把 repo 的本地 `default` 分支当作上游分支。
 这些来源记录不包含完整环境，也不能证明重建会得到逐字节相同的二进制。
 
+### 4.6 latest-release 跨版本兼容性验证
+
+独立工作流 **LP latest-release compatibility** 在 `compat/latest-release` 分支推送时运行，
+也支持手动指定 `latest_ref`（默认 `android-latest-release`）。它先编译当前源码的 Linux
+x86_64 host 工具，再从官方 `android-10.0.0_r1` 至 `android-16.0.0_r1` 的精确提交编译
+历史 `liblp` 与 `lpmake.cc`。历史 LP 源码保持原样；使用本次 latest 构建的 Clang、
+libc++ 和辅助库，具体来源与哈希单独记录，因此不等同于七套完整旧版 AOSP 工具链重建。
+
+测试包含合成 super 的 raw / sparse、元数据 10.0、两个 metadata slots、分区 SHA-256
+比对，以及从解包结果调用 latest `lpmake` 重打包。历史 writer 声明支持 Virtual A/B
+时，另要求 metadata 10.2 的读取与重打包。必测用例缺失、跳过或失败都会阻止通过；
+外层还核对七个确切 ref 和实际测试 writer 的哈希。每次 `--out` 必须使用空目录，
+避免把旧解包文件或旧 desparse 结果算成本次证据。
+
+这些合成测试不覆盖 metadata 10.1、多块设备 super、实际固件、刷机或 OTA / snapshot
+状态机；只有实际运行报告中的通过项才代表已验证范围。本地 harness 单元测试通过
+只说明测试程序自身的判断符合预期。
+
+Linux 上已有 latest AOSP 源码树和 bundle 时可以直接运行：
+
+```bash
+python3 -u scripts/run-lp-compatibility.py \
+  --aosp /srv/aosp \
+  --latest-bin /srv/dist/lptools-linux-x86_64/bin \
+  --out /srv/compat-run-01
+```
+
+工作流 artifact 保留总体报告、逐用例日志、历史源码提交与构建命令，以及 latest bundle
+和固化 manifest。即使 latest 编译失败，也尝试保存已同步项目的实际提交与失败前的来源
+记录。[scripts/make-compat-workflow.py](scripts/make-compat-workflow.py) 将所需脚本的
+精确字节嵌入 workflow；修改这些文件后须重新运行生成器。
+
 ## 5. 产物契约（给 imgpatchtools-rs 用）
 
 ```

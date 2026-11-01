@@ -11,7 +11,7 @@
 #   scripts/build-linux.sh --sync-only            # just fetch the tree
 #   scripts/build-linux.sh --work /mnt/aosp --out dist
 #   scripts/build-linux.sh --arch arm64           # require this native host architecture
-#   scripts/build-linux.sh --project-list config/projects-android16.txt
+#   scripts/build-linux.sh --project-list config/projects-latest.txt
 #
 # Platforms: linux-x86_64, linux-arm64, darwin-x86_64, darwin-arm64 (the bundle
 # gets the name of the HOST it was built on or for). On macOS the tree must be

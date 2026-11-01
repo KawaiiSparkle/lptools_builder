@@ -15,7 +15,8 @@ FILES = [
     "scripts/log.sh", "scripts/aosp-meta.sh", "scripts/aosp-lunch.sh",
     "scripts/build-linux.sh", "scripts/smoke-test.sh", "scripts/make-manifest.py",
     "scripts/build-historical-writers.py", "scripts/run-lp-compatibility.py",
-    "tests/lp-compatibility.py", "tools/check_projects.py",
+    "tests/lp-compatibility.py", "tests/test-lp-compatibility.py",
+    "tests/test-historical-writers.py", "tests/test-compatibility-runner.py", "tools/check_projects.py",
     "config/projects-latest.txt", "config/host-product/AndroidProducts.mk",
     "config/host-product/lptools_host.mk",
 ]
@@ -69,6 +70,11 @@ PY
 '''.replace("DIGEST", hashlib.sha256(raw).hexdigest())
     steps += [
         {"name": "Verify and unpack build scripts", "shell": "bash", "run": unpack},
+        {"name": "Check compatibility harness regressions", "shell": "bash", "run": '''set -euo pipefail
+python3 -B tests/test-lp-compatibility.py
+python3 -B tests/test-historical-writers.py
+python3 -B tests/test-compatibility-runner.py
+'''},
         {"uses": "./.github/actions/prepare"},
         {"name": "Build current latest-release tools", "shell": "bash", "run": '''set -euo pipefail
 bash scripts/build-linux.sh --ref "$AOSP_REF" --jobs 4 \\
@@ -82,10 +88,27 @@ run_beat "historical builds and compatibility matrix" python3 -u scripts/run-lp-
   --latest-bin "$GITHUB_WORKSPACE/dist/lptools-linux-x86_64/bin" \\
   --out "$GITHUB_WORKSPACE/compat-out"
 '''},
+        {"name": "Record checked-out source even after a failed build", "if": "always()", "shell": "bash", "run": r'''set -uo pipefail
+mkdir -p "$GITHUB_WORKSPACE/compat-source"
+source scripts/aosp-meta.sh
+rc=0
+lptools_export_meta "$GITHUB_WORKSPACE/aosp" "$GITHUB_WORKSPACE/compat-source" "$AOSP_REF" || rc=$?
+{
+  printf 'requested_ref=%s\n' "$AOSP_REF"
+  printf 'manifest_branch=%s\n' "${AOSP_BRANCH:-}"
+  printf 'manifest_tag=%s\n' "${AOSP_TAG:-}"
+  printf 'manifest_commit=%s\n' "${AOSP_MANIFEST_REV:-}"
+  printf 'pinned_projects=%s\n' "${AOSP_PINNED_PROJECTS:-0}"
+  printf 'provenance_exit=%s\n' "$rc"
+  printf 'builder_commit=%s\n' "$LPTOOLS_BUILDER_SHA"
+} > "$GITHUB_WORKSPACE/compat-source/source.txt"
+cat "$GITHUB_WORKSPACE/compat-source/source.txt"
+exit "$rc"
+'''},
         {"name": "Preserve reports and tool provenance", "if": "always()", "uses": "actions/upload-artifact@v4",
          "with": {"name": "lp-latest-release-compatibility", "compression-level": 0, "if-no-files-found": "warn",
                   "path": "\n".join([
-                      "compat-out/compatibility-report.*", "compat-out/matrix/lp-compatibility.*",
+                      "compat-source/", "compat-out/compatibility-report.*", "compat-out/matrix/lp-compatibility.*",
                       "compat-out/matrix/logs/", "compat-out/historical/writer-list.json",
                       "compat-out/historical/*/manifest.json", "compat-out/historical/logs/",
                       "compat-out/historical/source/*/pin.json", "dist/*.tar.gz", "dist/*.sha256",

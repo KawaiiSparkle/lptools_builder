@@ -38,6 +38,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -161,12 +162,13 @@ class Case:
 
     def finish(self):
         bad = [c for c in self.checks if not c["ok"]]
-        if self.status is None:
-            self.status = "fail" if bad else ("pass" if self.checks else "skip")
-            if bad:
-                self.failure = "; ".join("%s: expected %r, got %r"
-                                         % (c["name"], c["expected"], c["actual"]) for c in bad[:3])
-            elif not self.checks:
+        if bad:
+            self.status = "fail"
+            self.failure = "; ".join("%s: expected %r, got %r"
+                                     % (c["name"], c["expected"], c["actual"]) for c in bad[:3])
+        elif self.status is None:
+            self.status = "pass" if self.checks else "skip"
+            if not self.checks:
                 self.skip_reason, self.skip_kind = self.skip_reason or "no checks ran", "blocked"
         return self
 
@@ -302,15 +304,23 @@ def run_ok(ctx, case, label, cmd):
     return case.check(label + " exit 0", res["rc"] == 0, 0, res["rc"], _tail(res["stderr"]))
 
 
+def fresh_directory(path):
+    """Keep previous evidence, but never consume it as output from this attempt."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(prefix=path.name + " ", dir=path.parent))
+
+
 def ensure_raw(ctx, case, img, label, storage):
-    if storage.exists():
-        return storage
-    return storage if run_ok(ctx, case, label, [ctx.latest["simg2img"]["path"], str(img), str(storage)]) \
-        else None
+    storage = fresh_directory(storage.with_suffix("")) / storage.name
+    if not run_ok(ctx, case, label, [ctx.latest["simg2img"]["path"], str(img), str(storage)]):
+        return None
+    written = storage.is_file() and storage.stat().st_size > 0
+    return storage if case.check(label + " wrote a raw image", written, "> 0 bytes",
+                                 storage.stat().st_size if storage.is_file() else "missing") else None
 
 
 def unpack_slot(ctx, case, img, slot, parts, images, label, outdir, sparse, fallback):
-    outdir.mkdir(parents=True, exist_ok=True)
+    outdir = fresh_directory(outdir)
     exe = ctx.latest["lpunpack"]["path"]
     res = ctx.run(case, label + ":lpunpack", [exe, "--slot=%d" % slot, str(img), str(outdir)])
     mode = "direct sparse input" if sparse else "raw input"
@@ -318,6 +328,7 @@ def unpack_slot(ctx, case, img, slot, parts, images, label, outdir, sparse, fall
         raw = fallback or ensure_raw(ctx, case, img, label + ":desparse",
                                      outdir.with_name(outdir.name + " desparse.img"))
         if raw is not None:
+            outdir = fresh_directory(outdir.with_name(outdir.name + " desparse"))
             res = ctx.run(case, label + ":lpunpack-desparse",
                           [exe, "--slot=%d" % slot, str(raw), str(outdir)])
             mode = "simg2img front end"
@@ -363,7 +374,13 @@ def verify_super(ctx, case, img, parts, images, label, minor, scratch, sparse=Fa
     case.geometry = {key: info[key] for key in ("metadata_size", "slots", "device_size", "partitions", "groups")}
     names = sorted(name for name, _ in parts)
     resolved = {name: _resolve_part(info, name) for name, _ in parts}
-    allowed = {name for name in resolved.values() if name} | {name + "_b" for name, _ in parts}
+    allowed = {name for name in resolved.values() if name}
+    if minor == 2:
+        for name, _ in parts:
+            inactive = info["partitions"].get(name + "_b")
+            if (resolved[name] == name + "_a" and inactive is not None
+                    and inactive["size"] == 0 and inactive["extents"] == 0):
+                allowed.add(name + "_b")
     sizes = {name: info["partitions"].get(resolved[name] or name, {}).get("size")
              for name, _ in parts}
     for name, ok, expected, actual in (
@@ -373,7 +390,8 @@ def verify_super(ctx, case, img, parts, images, label, minor, scratch, sparse=Fa
              (info["metadata_size"], info["slots"], info["device_size"])),
             ("group %s max size" % GROUP_NAME, _group_size(info["groups"], GROUP_NAME) == GROUP_SIZE,
              GROUP_SIZE, _group_size(info["groups"], GROUP_NAME)),
-            ("partition set", all(resolved.values()) and set(info["partitions"]) <= allowed,
+            ("partition set", all(resolved.values()) and set(info["partitions"]) <= allowed
+             and (minor == 2 or all(resolved[name] == name for name, _ in parts)),
              names, sorted(info["partitions"])),
             ("partition sizes", all(sizes[name] == size for name, size in parts),
              dict(parts), sizes)):
@@ -478,11 +496,11 @@ def run_writer(ctx, writer, wd):
             case.check("lpmake --virtual-ab wrote an image", True, "> 0 bytes", img.stat().st_size)
             info = verify_super(ctx, case, img, MAIN_PARTS, images, "image", 2, wd / "verify vab",
                                 require_slot1=False)
-            if "--virtual-ab" in ctx.latest_flags and info and info["extracted_images"]:
+            can_repack = case.check("latest lpmake supports virtual A/B repack",
+                                    "--virtual-ab" in ctx.latest_flags, "--virtual-ab", sorted(ctx.latest_flags))
+            if can_repack and info and info["extracted_images"]:
                 verify_repack(ctx, case, wd / "repack vab.img", MAIN_PARTS, info["extracted_images"], 2,
                               virtual_ab=True, require_slot1=False)
-            else:
-                case.notes.append("latest lpmake does not advertise --virtual-ab: v10.2 repack skipped")
     case.finish()
     cases.append(case)
 
@@ -561,7 +579,9 @@ def render_markdown(report):
         if not items:
             lines.append("None.")
         lines.append("")
-    lines += ["## Failed case commands", ""]
+    lines += ["## Required coverage gaps", ""]
+    lines += ["- " + error for error in report["coverage_errors"]] or ["None."]
+    lines += ["", "## Failed case commands", ""]
     failed = {item["id"] for item in summary["failed"]}
     for case in report["cases"]:
         if case["id"] in failed:
@@ -572,10 +592,34 @@ def render_markdown(report):
     return "\n".join(lines) + "\n"
 
 
+def required_coverage(writers, cases):
+    """All advertised required scenarios must exist exactly once and pass."""
+    errors = []
+    if not writers:
+        errors.append("no historical writers were tested")
+    for writer in writers:
+        slug = _slug(writer["tag"])
+        scenarios = ["raw-v10.0", "sparse-v10.0"]
+        if "--virtual-ab" in writer["flags"]:
+            scenarios.append("virtual-ab-v10.2")
+        for scenario in scenarios:
+            case_id = slug + "/" + scenario
+            matches = [case for case in cases if case.id == case_id and case.writer == writer["tag"]]
+            if len(matches) != 1 or matches[0].tier != "required" or matches[0].status != "pass":
+                errors.append(case_id + ": expected exactly one passing required case")
+    for case in cases:
+        if case.tier == "required" and case.status != "pass":
+            errors.append(case.id + ": required case " + str(case.status))
+    return errors
+
+
 def build_report(latest, writers, cases):
     summary = summarize(cases)
+    coverage_errors = required_coverage(writers, cases)
     failed = summary["failed_required"]
-    headline = "FAIL: %d required case(s) failed against the latest readers." % failed if failed else (
+    incompatible = failed > 0 or bool(coverage_errors)
+    headline = ("FAIL: %d required case(s) failed; required coverage %s." %
+                (failed, "incomplete" if coverage_errors else "complete")) if incompatible else (
         "PASS: latest readers handled every required fixture from %d writer(s); %d unsupported "
         "capabilit%s recorded separately." % (len(writers), summary["skipped_unsupported"],
                                              "y" if summary["skipped_unsupported"] == 1 else "ies"))
@@ -589,7 +633,8 @@ def build_report(latest, writers, cases):
                          "partitions": [{"name": name, "size": size} for name, size in MAIN_PARTS]},
             "latest": latest, "writers": writers, "cases": [case.to_json() for case in cases],
             "summary": summary,
-            "verdict": {"exit_code": 1 if failed else 0, "compatible": failed == 0,
+            "coverage_complete": not coverage_errors, "coverage_errors": coverage_errors,
+            "verdict": {"exit_code": 1 if incompatible else 0, "compatible": not incompatible,
                         "headline": headline}}
 
 
@@ -605,6 +650,8 @@ def main(argv=None):
                         help="per-command timeout (default 600)")
     args = parser.parse_args(argv)
     out = Path(args.out).expanduser().resolve()
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        parser.error("--out must be an empty directory; use a fresh path to keep prior evidence")
     out.mkdir(parents=True, exist_ok=True)
     try:
         if not args.writer:

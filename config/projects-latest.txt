@@ -6,7 +6,7 @@
 # (simg2img / img2simg) with the official Soong build.
 #
 # Tools that consume this list:
-#   - .github/workflows/build-lptools.yml   (CI: repo sync + m)
+#   - .github/workflows/lp-compatibility.yml (rolling-release CI)
 #   - scripts/build-linux.sh                (local / WSL build)
 #   - tools/check_projects.py               (validates every entry against the
 #                                            AOSP manifest before syncing, so a
@@ -27,6 +27,8 @@
 platform/build
 platform/build/soong
 platform/build/blueprint
+# Soong microfactory maps github.com/akrylysov/pogreb here on android17-release.
+platform/external/pogreb
 # Android 15 release-config (including trunk_staging) lives in its own project.
 platform/build/release
 # Product configuration includes sampling/afdo_profiles.mk even for host builds.
@@ -56,6 +58,8 @@ platform/prebuilts/sdk
 platform/system/update_engine
 platform/system/extras
 platform/system/core
+# liblp moved out of system/core/fs_mgr in recent release manifests.
+platform/system/fs/fs_mgr
 # Soong parses aidl_interface declarations in both owning projects, even for host tools.
 platform/system/tools/aidl
 platform/system/libbase
@@ -65,6 +69,8 @@ platform/libnativehelper
 
 # --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils --------
 platform/external/protobuf
+# Recent host protobuf links Abseil instead of bundling these providers.
+platform/external/abseil-cpp
 platform/external/fmtlib
 platform/external/e2fsprogs
 platform/external/zlib

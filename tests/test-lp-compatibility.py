@@ -19,6 +19,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location("lp_compatibility", HERE / "lp-compatibility.py")
@@ -216,23 +217,52 @@ class CaseAndReportTests(unittest.TestCase):
         self.assertLess(len(command["stdout"]), 2100)
         self.assertEqual(command["argv"], ["lpmake"])
 
-    def test_exit_code_only_counts_required_failures(self):
-        passing = self.make_case("w/a")
-        optional_failure = self.make_case("w/b", tier="optional", ok=False)
-        unsupported = self.make_case("w/c", tier="optional",
-                                     status_skip="unsupported: writer lacks --virtual-ab")
-        report = lp.build_report({"bin_dir": "/bin"}, [], [passing, optional_failure, unsupported])
+    def test_complete_required_coverage_keeps_optional_outcomes_separate(self):
+        writers = [{"tag": "w", "flags": []}]
+        cases = [self.make_case("w/raw-v10.0"), self.make_case("w/sparse-v10.0"),
+                 self.make_case("w/b", tier="optional", ok=False),
+                 self.make_case("w/c", tier="optional",
+                                status_skip="unsupported: writer lacks --virtual-ab")]
+        report = lp.build_report({"bin_dir": "/bin"}, writers, cases)
         self.assertEqual(report["verdict"]["exit_code"], 0)
         self.assertTrue(report["verdict"]["compatible"])
+        self.assertTrue(report["coverage_complete"])
+        self.assertEqual(report["coverage_errors"], [])
         self.assertEqual(report["summary"]["failed_optional"], 1)
         self.assertEqual(report["summary"]["skipped_unsupported"], 1)
-        self.assertIn("PASS", report["verdict"]["headline"])
 
-        required_failure = self.make_case("w/d", ok=False)
-        report = lp.build_report({"bin_dir": "/bin"}, [], [passing, required_failure])
+        cases.append(self.make_case("w/d", ok=False))
+        report = lp.build_report({"bin_dir": "/bin"}, writers, cases)
         self.assertEqual(report["verdict"]["exit_code"], 1)
         self.assertFalse(report["verdict"]["compatible"])
-        self.assertIn("FAIL", report["verdict"]["headline"])
+
+    def test_required_coverage_rejects_missing_skipped_duplicate_or_optional_case(self):
+        writers = [{"tag": "w", "flags": []}]
+        raw = self.make_case("w/raw-v10.0")
+        sparse = self.make_case("w/sparse-v10.0")
+        variants = [[], [raw], [raw, sparse, sparse],
+                    [raw, self.make_case("w/sparse-v10.0", status_skip="unsupported")],
+                    [raw, self.make_case("w/sparse-v10.0", tier="optional")]]
+        for cases in variants:
+            with self.subTest(ids=[case.id for case in cases]):
+                report = lp.build_report({"bin_dir": "/bin"}, writers, cases)
+                self.assertEqual(report["verdict"]["exit_code"], 1)
+                self.assertFalse(report["coverage_complete"])
+        self.assertFalse(lp.build_report({}, [], [])["verdict"]["compatible"])
+
+    def test_virtual_ab_is_required_when_writer_advertises_it(self):
+        writers = [{"tag": "w", "flags": ["--virtual-ab"]}]
+        cases = [self.make_case("w/raw-v10.0"), self.make_case("w/sparse-v10.0")]
+        self.assertTrue(lp.required_coverage(writers, cases))
+        cases.append(self.make_case("w/virtual-ab-v10.2"))
+        self.assertEqual(lp.required_coverage(writers, cases), [])
+
+    def test_later_skip_never_hides_a_failed_check(self):
+        case = lp.Case("w/sparse-v10.0", "w", "required", "sparse")
+        case.check("slot1 bytes", False, "input hash", "wrong hash")
+        case.skip("unsupported: sparse repack unavailable")
+        self.assertEqual(case.finish().status, "fail")
+        self.assertIn("slot1 bytes", case.failure)
 
     def test_summarize_groups_per_writer(self):
         cases = [self.make_case("w/a"), self.make_case("w/b", ok=False),
@@ -383,6 +413,39 @@ class VerifyPathTests(TmpDirTest):
         failed = [c["name"] for c in case.checks if not c["ok"]]
         self.assertTrue(any("partition set" in name for name in failed), failed)
 
+    def test_backup_suffix_does_not_allow_an_unverified_partition(self):
+        for minor, suffix in ((0, ""), (2, "_a")):
+            with self.subTest(minor=minor):
+                parts = [(name + suffix, size) for name, size in lp.MAIN_PARTS]
+                parts.append(("system_b", 4096))
+                ctx = ScriptedCtx(self.tmp, self.images, dump_for(parts, minor), write_suffix=suffix)
+                case = lp.Case("w/extra-backup", "w", "required", "raw")
+                lp.verify_super(ctx, case, self.tmp / "extra-backup.img", lp.MAIN_PARTS,
+                                self.images, "image", minor, self.tmp / "extra backup")
+                self.assertEqual(case.finish().status, "fail")
+                self.assertIn("partition set", case.failure)
+
+    def test_virtual_ab_empty_backup_partition_is_allowed(self):
+        parts = [(name + "_a", size) for name, size in lp.MAIN_PARTS]
+        dump = dump_for(parts, minor=2).replace(
+            "Super partition layout:",
+            "  Name: system_b\n  Group: dyn_b\n  Attributes: readonly\n  Extents:\n\n"
+            "Super partition layout:")
+        ctx = ScriptedCtx(self.tmp, self.images, dump, write_suffix="_a")
+        case = lp.Case("w/empty-backup", "w", "required", "raw")
+        lp.verify_super(ctx, case, self.tmp / "empty-backup.img", lp.MAIN_PARTS,
+                        self.images, "image", 2, self.tmp / "empty backup")
+        self.assertEqual(case.finish().status, "pass", case.failure)
+
+    def test_raw_image_cannot_substitute_slot_suffixed_partition_names(self):
+        parts = [(name + "_a", size) for name, size in lp.MAIN_PARTS]
+        ctx = ScriptedCtx(self.tmp, self.images, dump_for(parts), write_suffix="_a")
+        case = lp.Case("w/wrong-names", "w", "required", "raw")
+        lp.verify_super(ctx, case, self.tmp / "wrong-names.img", lp.MAIN_PARTS,
+                        self.images, "image", 0, self.tmp / "wrong names")
+        self.assertEqual(case.finish().status, "fail")
+        self.assertIn("partition set", case.failure)
+
     def test_wrong_version_fails_the_case(self):
         case, _info, _ctx = self.check_image(dump_minor=2)
         self.assertEqual(case.status, "fail")
@@ -416,6 +479,89 @@ class VerifyPathTests(TmpDirTest):
                                           "sha256": ""})
         case, _info, _ctx = self.check_image(images=images, parts=parts)
         self.assertEqual(case.status, "pass", case.failure)
+
+
+class EvidenceIsolationTests(TmpDirTest):
+    def test_desparse_never_reuses_an_existing_raw_file(self):
+        stale = self.tmp / "raw view.img"
+        stale.write_bytes(b"old payload")
+        case = lp.Case("w/sparse", "w", "required", "sparse")
+        ctx = mock.Mock(latest={"simg2img": {"path": "/fake/simg2img"}})
+        ctx.run.return_value = {"rc": 1, "stderr": "current sparse image corrupt"}
+        result = lp.ensure_raw(ctx, case, self.tmp / "current sparse.img", "desparse", stale)
+        self.assertIsNone(result)
+        ctx.run.assert_called_once()
+        current = Path(ctx.run.call_args.args[2][-1])
+        self.assertNotEqual(current, stale)
+        self.assertFalse(current.exists())
+        self.assertEqual(stale.read_bytes(), b"old payload")
+        self.assertEqual(case.finish().status, "fail")
+
+    def test_successful_desparse_must_write_a_new_nonempty_file(self):
+        for payload in (None, b"", b"new raw"):
+            with self.subTest(payload=payload):
+                case = lp.Case("w/sparse", "w", "required", "sparse")
+                ctx = mock.Mock(latest={"simg2img": {"path": "/fake/simg2img"}})
+                def convert(_case, _label, argv):
+                    if payload is not None:
+                        Path(argv[-1]).write_bytes(payload)
+                    return {"rc": 0, "stderr": ""}
+                ctx.run.side_effect = convert
+                result = lp.ensure_raw(ctx, case, self.tmp / "current.img", "desparse",
+                                       self.tmp / "view.img")
+                self.assertEqual(result is not None, bool(payload))
+                self.assertEqual(case.finish().status, "pass" if payload else "fail")
+
+    def test_success_exit_cannot_reuse_old_extracted_partition_files(self):
+        stale = self.tmp / "slot0"
+        stale.mkdir()
+        payload = b"old partition"
+        (stale / "system.img").write_bytes(payload)
+        images = {"system": {"sha256": lp.sha256_file(stale / "system.img")}}
+        case = lp.Case("w/raw", "w", "required", "raw")
+        ctx = mock.Mock(latest={"lpunpack": {"path": "/fake/lpunpack"}})
+        ctx.run.return_value = {"rc": 0, "stderr": ""}
+        result = lp.unpack_slot(ctx, case, self.tmp / "current.img", 0,
+                                [("system", len(payload))], images, "extract", stale, False, None)
+        self.assertFalse(result["ok"])
+        self.assertIn("system.img missing", result["problems"])
+        self.assertEqual((stale / "system.img").read_bytes(), payload)
+        self.assertNotEqual(Path(ctx.run.call_args.args[2][-1]), stale)
+
+    def test_nonempty_output_is_rejected_before_tool_resolution(self):
+        evidence = self.tmp / "old report.json"
+        evidence.write_text("previous run", encoding="utf-8")
+        with mock.patch.object(lp, "resolve_latest") as resolve:
+            with self.assertRaises(SystemExit) as caught:
+                lp.main(["--out", str(self.tmp), "--latest-bin", "/missing", "--writer", "w=/missing"])
+        self.assertEqual(caught.exception.code, 2)
+        resolve.assert_not_called()
+        self.assertEqual(evidence.read_text(encoding="utf-8"), "previous run")
+
+    def test_sparse_repack_capability_gap_cannot_hide_prior_failures(self):
+        case = lp.Case("w/sparse-v10.0", "w", "required", "sparse")
+        case.check("slot1 bytes", False, "input hash", "wrong hash")
+        ctx = mock.Mock(latest={}, latest_flags=set())
+        lp.verify_repack(ctx, case, self.tmp / "repack.img", [], {}, 0, sparse=True)
+        self.assertEqual(case.finish().status, "fail")
+        self.assertIn("slot1 bytes", case.failure)
+
+    def test_virtual_ab_repack_capability_is_required(self):
+        ctx = mock.Mock(latest={"lpmake": {"path": "/fake/latest-lpmake"}}, latest_flags=set())
+        def write_vab(case, _label, argv):
+            Path(argv[-1]).write_bytes(b"fixture")
+            return {"rc": 0, "stderr": ""}
+        ctx.run.side_effect = write_vab
+        info = {"extracted_images": {"system": {"path": "extracted"}}}
+        writer = {"tag": "w", "path": "/fake/historical-lpmake", "flags": ["--virtual-ab"]}
+        with mock.patch.object(lp, "build_super", return_value=False), \
+                mock.patch.object(lp, "verify_super", return_value=info), \
+                mock.patch.object(lp, "verify_repack") as repack:
+            cases = lp.run_writer(ctx, writer, self.tmp / "writer")
+        vab = next(case for case in cases if case.id == "w/virtual-ab-v10.2")
+        self.assertEqual(vab.status, "fail")
+        self.assertIn("virtual A/B repack", vab.failure)
+        repack.assert_not_called()
 
 
 @unittest.skipUnless(os.name == "posix", "needs an executable script")

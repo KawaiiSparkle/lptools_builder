@@ -9,6 +9,24 @@ import subprocess
 import sys
 
 
+EXPECTED_REFS = {"android-%d.0.0_r1" % version for version in range(10, 17)}
+
+
+def coverage_complete(writers, build_rc, matrix_rc, result):
+    """Only the exact seven builds and their complete, current matrix count."""
+    if (build_rc != 0 or matrix_rc != 0 or not result or len(writers) != len(EXPECTED_REFS)
+            or {writer["ref"] for writer in writers} != EXPECTED_REFS
+            or any(writer["status"] != "built" for writer in writers)):
+        return False
+    tested = result.get("writers", [])
+    expected = {(writer["tag"], writer["sha256"]) for writer in writers}
+    observed = {(writer["tag"], writer["sha256"]) for writer in tested}
+    return (len(tested) == len(writers) and observed == expected
+            and result.get("coverage_complete") is True
+            and result.get("coverage_errors") == []
+            and result["verdict"]["compatible"])
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--aosp", required=True)
@@ -18,6 +36,8 @@ def main(argv=None):
     root = Path(__file__).resolve().parents[1]
     out = Path(args.out).resolve()
     historical, matrix = out / "historical", out / "matrix"
+    if out.exists() and (not out.is_dir() or any(out.iterdir())):
+        parser.error("--out must be an empty directory; use a fresh path to keep prior evidence")
     out.mkdir(parents=True, exist_ok=True)
     latest_bin = Path(args.latest_bin).resolve()
     latest_manifest = json.loads((latest_bin.parent / "manifest.json").read_text(encoding="utf-8"))
@@ -27,7 +47,6 @@ def main(argv=None):
     listing = json.loads((historical / "writer-list.json").read_text(encoding="utf-8"))
     writers = listing["writers"]
     built = [w for w in writers if w["status"] == "built"]
-    failed = [w for w in writers if w["status"] != "built"]
     matrix_rc = None
     if built:
         command = [sys.executable, "-u", str(root / "tests/lp-compatibility.py"),
@@ -37,9 +56,8 @@ def main(argv=None):
         matrix_rc = subprocess.call(command)
     matrix_path = matrix / "lp-compatibility.json"
     result = json.loads(matrix_path.read_text(encoding="utf-8")) if matrix_path.is_file() else None
-    complete = len(writers) == 7 and len(built) == 7 and not failed and build_rc == 0
-    passed = (complete and matrix_rc == 0 and bool(result) and result["verdict"]["compatible"]
-              and result["summary"]["failed_optional"] == 0)
+    complete = coverage_complete(writers, build_rc, matrix_rc, result)
+    passed = complete and result["summary"]["failed_optional"] == 0
     report = {"schema": "lp-cross-version/1", "status": "pass" if passed else "fail",
               "coverage_complete": complete, "latest": latest_manifest,
               "historical_build_exit": build_rc, "matrix_exit": matrix_rc,
