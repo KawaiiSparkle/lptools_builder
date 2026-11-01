@@ -1,0 +1,82 @@
+# Rolling latest-release compatibility bootstrap. Kept separate from the proven
+# Android 15 list; the actual branch and every source commit are recorded by CI.
+# platform/build/bazel{,_common_rules} no longer exist in recent release manifests.
+# Minimum AOSP project list required to build the logical-partition host tools
+# (lpmake / lpdump / lpunpack / lpadd / lpflash) plus the sparse helpers
+# (simg2img / img2simg) with the official Soong build.
+#
+# Tools that consume this list:
+#   - .github/workflows/build-lptools.yml   (CI: repo sync + m)
+#   - scripts/build-linux.sh                (local / WSL build)
+#   - tools/check_projects.py               (validates every entry against the
+#                                            AOSP manifest before syncing, so a
+#                                            typo or an upstream rename fails in
+#                                            seconds instead of after a 20GB
+#                                            sync)
+#
+# Rules:
+#   * one exact manifest project name per line, '#' starts a comment;
+#   * keep the list sorted by layer (build system -> prebuilts -> tools -> libs);
+#   * only add a project when the build actually needs it -- every entry costs
+#     disk and sync time.
+
+# --- Build system bootstrap (Soong + Kati/make + product definitions) -------
+# platform/build is checked out at build/make in the AOSP manifest. Its
+# copy/link files provide build/envsetup.sh and the product definitions.
+# platform/build/make is not a repository name; do not add that alias.
+platform/build
+platform/build/soong
+platform/build/blueprint
+# Android 15 release-config (including trunk_staging) lives in its own project.
+platform/build/release
+# Product configuration includes sampling/afdo_profiles.mk even for host builds.
+toolchain/pgo-profiles
+platform/bionic
+
+# --- Prebuilts (toolchains; these are the bulk of the checkout) ------------
+# Android 15 soong_ui defaults to the in-tree JDK 21. Older tags need a
+# matching list/toolchain; installing a system JDK does not replace this checkout.
+platform/prebuilts/jdk/jdk21
+# Go bootstrap imports analysis_v2 from this checkout, before module compilation.
+platform/prebuilts/bazel/common
+# Soong host_cross(windows) links against the in-tree MinGW runtime/sysroot.
+platform/prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8
+# LinuxGccRoot supplies the glibc sysroot used by Clang for Linux host binaries.
+platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.17-4.8
+# Recent Soong defaults to siso; retain the upstream default executor.
+platform/prebuilts/siso
+platform/prebuilts/build-tools
+platform/prebuilts/clang/host/linux-x86
+platform/prebuilts/go/linux-x86
+platform/prebuilts/misc
+platform/prebuilts/sdk
+
+# --- The tools themselves and their owning repos ---------------------------
+# Recent liblpdump uses libupdate_engine_headers.
+platform/system/update_engine
+platform/system/extras
+platform/system/core
+# Soong parses aidl_interface declarations in both owning projects, even for host tools.
+platform/system/tools/aidl
+platform/system/libbase
+platform/system/logging
+# module_ndk_libs/libnativehelper validates its NDK stub against this implementation.
+platform/libnativehelper
+
+# --- C/C++ dependencies of liblp / libsparse / libbase / ext4_utils --------
+platform/external/protobuf
+platform/external/fmtlib
+platform/external/e2fsprogs
+platform/external/zlib
+platform/external/boringssl
+platform/external/libcxx
+platform/external/libcxxabi
+platform/external/googletest
+platform/external/libpng
+platform/external/sqlite
+# Blueprint also builds compliance_sbom; its SPDX Go packages are mandatory.
+platform/external/spdx-tools
+platform/external/go-cmp
+platform/external/golang-protobuf
+platform/external/starlark-go
+platform/external/llvm

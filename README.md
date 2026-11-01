@@ -201,7 +201,10 @@ Actions → **Build lptools** → Run workflow：
 
 `aosp_ref` 的可用值可以在 [AOSP 官方 manifest 分支 / 标签列表](https://android.googlesource.com/platform/manifest/+refs)
 中查看，Run workflow 的输入提示也附有这个地址。页面的 **Branches** 和 **Tags** 分别列出
-分支与标签；填写短名称，例如 `main` 或 `android-15.0.0_r1`。
+分支与标签；填写短名称，例如 `android-latest-release` 或 `android-15.0.0_r36`。
+`android-latest-release` 是滚动分支，后续运行可能切换到新的 Android 发布系列；
+`android-15.0.0_r36` 是固定发布标签。实际使用的 manifest 提交与逐项目提交会记录在产物中。
+引用存在不等于当前最小项目集已经验证支持该版本。
 
 无需下载 AOSP，也可以用 Git 实时查询（仅列出远程引用，不创建本地源码树）：
 

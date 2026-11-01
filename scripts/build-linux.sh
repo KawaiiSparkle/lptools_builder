@@ -11,6 +11,7 @@
 #   scripts/build-linux.sh --sync-only            # just fetch the tree
 #   scripts/build-linux.sh --work /mnt/aosp --out dist
 #   scripts/build-linux.sh --arch arm64           # require this native host architecture
+#   scripts/build-linux.sh --project-list config/projects-android16.txt
 #
 # Platforms: linux-x86_64, linux-arm64, darwin-x86_64, darwin-arm64 (the bundle
 # gets the name of the HOST it was built on or for). On macOS the tree must be
@@ -32,6 +33,7 @@ SKIP_SYNC=0
 SYNC_ONLY=0
 NO_SMOKE=0
 ARCH_ARG=
+PROJECT_LIST="$ROOT/required-projects.txt"
 COMBO_FILE=""
 HOST_BIN_FILE=""
 PROJECTS_FILE=""
@@ -60,6 +62,7 @@ while [ $# -gt 0 ]; do
     --out) OUT=$2; shift 2 ;;
     --jobs) JOBS=$2; shift 2 ;;
     --arch) ARCH_ARG=$2; shift 2 ;;
+    --project-list) PROJECT_LIST=$2; shift 2 ;;
     --skip-sync) SKIP_SYNC=1; shift ;;
     --sync-only) SYNC_ONLY=1; shift ;;
     --no-smoke) NO_SMOKE=1; shift ;;
@@ -144,11 +147,11 @@ if [ "$SKIP_SYNC" -eq 0 ]; then
       -u https://android.googlesource.com/platform/manifest -b "$REF" --depth=1 )
 
   # Use the validated, actual manifest names for sync as well as validation.
-  log "resolving required-projects.txt against the manifest"
+  log "resolving $PROJECT_LIST against the manifest"
   PROJECTS_FILE=$(mktemp)
-  python3 "$ROOT/tools/check_projects.py" --repo-root "$WORK" --list "$ROOT/required-projects.txt" \
+  python3 "$ROOT/tools/check_projects.py" --repo-root "$WORK" --list "$PROJECT_LIST" \
     --print-projects > "$PROJECTS_FILE" \
-    || die "required-projects.txt does not match this manifest; fix it or pick another --ref"
+    || die "project list does not match this manifest; fix it or pick another --ref"
   PROJECTS=()
   while IFS= read -r project; do
     [ -z "$project" ] || PROJECTS+=("$project")
@@ -267,9 +270,10 @@ group_start "package (manifest + tarball)"
 log "recording AOSP provenance (branch / tag / pinned manifest)"
 lptools_export_meta "$WORK" "$BUNDLE" "$REF"
 REPO_VERSION=$(repo --version 2>/dev/null | awk "/repo version/ {print \$3}" || true)
-BUILDER_SHA=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)
-BUILDER_REF=$(git -C "$ROOT" remote get-url origin 2>/dev/null || echo unknown)
-BUILDER_BRANCH=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+# A self-contained CI payload has no Git checkout; the runner supplies its source identity.
+BUILDER_SHA=${LPTOOLS_BUILDER_SHA:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)}
+BUILDER_REF=${LPTOOLS_BUILDER_REF:-$(git -C "$ROOT" remote get-url origin 2>/dev/null || echo unknown)}
+BUILDER_BRANCH=${LPTOOLS_BUILDER_BRANCH:-$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)}
 export SOURCE_DATE_EPOCH_ISO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 log "writing manifest (AOSP branch: ${AOSP_BRANCH:-unknown})"
