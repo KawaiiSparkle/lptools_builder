@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Generate the unpatched upstream Linux build workflow."""
+import importlib.util
+from pathlib import Path
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+spec = importlib.util.spec_from_file_location("ci_payload", ROOT / "scripts/make-compat-workflow.py")
+shared = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(shared)
+FILES = [
+    ".github/actions/prepare/action.yml",
+    "scripts/free-disk.sh", "scripts/free-disk-darwin.sh", "scripts/prepare-swap.sh",
+    "scripts/log.sh", "scripts/aosp-meta.sh", "scripts/aosp-lunch.sh",
+    "scripts/build-linux.sh", "scripts/smoke-test.sh", "scripts/make-manifest.py",
+    "tools/check_projects.py", "config/projects-latest.txt",
+    "config/host-product/AndroidProducts.mk", "config/host-product/lptools_host.mk",
+]
+
+
+def workflow():
+    steps = shared.payload_steps(FILES)
+    steps += [
+        {"uses": "./.github/actions/prepare"},
+        {"name": "Sync official upstream source (no patches)", "shell": "bash", "run": r'''set -euo pipefail
+bash scripts/build-linux.sh --ref "$AOSP_REF" --jobs 4 --sync-only \
+  --project-list "$GITHUB_WORKSPACE/config/projects-latest.txt" \
+  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist"
+'''},
+        {"name": "Verify upstream projects are clean before compilation", "shell": "bash", "run": r'''set -euo pipefail
+cd "$GITHUB_WORKSPACE/aosp"
+repo forall --ignore-missing -e -c '
+  status=$(git status --porcelain --untracked-files=all) || exit $?
+  if [ -n "$status" ]; then
+    printf "Modified upstream project: %s\n%s\n" "$REPO_PATH" "$status" >&2
+    exit 1
+  fi
+'
+'''},
+        {"name": "Compile upstream Linux tools, verify and package", "shell": "bash", "run": r'''set -euo pipefail
+bash scripts/build-linux.sh --ref "$AOSP_REF" --jobs 4 --skip-sync \
+  --project-list "$GITHUB_WORKSPACE/config/projects-latest.txt" \
+  --work "$GITHUB_WORKSPACE/aosp" --out "$GITHUB_WORKSPACE/dist"
+'''},
+        {"name": "Preserve actual source identity and source status", "if": "always()", "shell": "bash", "run": r'''set -uo pipefail
+mkdir -p "$GITHUB_WORKSPACE/upstream-source"
+source scripts/aosp-meta.sh
+rc=0
+lptools_export_meta "$GITHUB_WORKSPACE/aosp" "$GITHUB_WORKSPACE/upstream-source" "$AOSP_REF" || rc=$?
+{
+  printf 'requested_ref=%s\n' "$AOSP_REF"
+  printf 'manifest_branch=%s\n' "${AOSP_BRANCH:-}"
+  printf 'manifest_tag=%s\n' "${AOSP_TAG:-}"
+  printf 'manifest_commit=%s\n' "${AOSP_MANIFEST_REV:-}"
+  printf 'pinned_projects=%s\n' "${AOSP_PINNED_PROJECTS:-0}"
+  printf 'provenance_exit=%s\n' "$rc"
+  printf 'builder_commit=%s\n' "$LPTOOLS_BUILDER_SHA"
+  printf 'patches_applied=none\n'
+  printf 'build_system=official-soong\n'
+  printf 'build_configuration=added-host-product\n'
+} > "$GITHUB_WORKSPACE/upstream-source/source.txt"
+cat "$GITHUB_WORKSPACE/upstream-source/source.txt"
+if [ -d "$GITHUB_WORKSPACE/aosp/.repo" ]; then
+  (
+    cd "$GITHUB_WORKSPACE/aosp" || exit $?
+    repo forall --ignore-missing -e -c '
+      status=$(git status --porcelain --untracked-files=all) || exit $?
+      if [ -n "$status" ]; then
+        printf "Modified upstream project: %s\n%s\n" "$REPO_PATH" "$status" >&2
+        exit 1
+      fi
+      printf "%s %s clean\n" "$REPO_PATH" "$(git rev-parse HEAD)"
+    '
+  ) > "$GITHUB_WORKSPACE/upstream-source/project-status.txt" 2>&1 || rc=$?
+  cat "$GITHUB_WORKSPACE/upstream-source/project-status.txt"
+fi
+exit "$rc"
+'''},
+        {"name": "Upload built tools and source records", "if": "always()", "uses": "actions/upload-artifact@v4",
+         "with": {"name": "lp-upstream-linux-x86_64", "compression-level": 0, "if-no-files-found": "warn",
+                  "path": "\n".join([
+                      "upstream-source/", "dist/*.tar.gz", "dist/*.sha256",
+                      "dist/lptools-linux-x86_64/manifest.json",
+                      "dist/lptools-linux-x86_64/aosp-manifest.xml"])}},
+    ]
+    return {
+        "name": "LP upstream build (unpatched)",
+        "on": {"push": {"branches": ["build/upstream"]},
+               "workflow_dispatch": {"inputs": {"aosp_ref": {
+                   "description": "Official AOSP manifest ref", "default": "android-latest-release", "required": True}}}},
+        "permissions": {"contents": "read"},
+        "concurrency": {"group": "lp-upstream-${{ github.ref }}", "cancel-in-progress": True},
+        "jobs": {"linux": {"runs-on": "ubuntu-24.04", "timeout-minutes": 180,
+                          "env": {"AOSP_REF": "${{ inputs.aosp_ref || 'android-latest-release' }}",
+                                  "LPTOOLS_PRODUCT": "lptools_host", "LPTOOLS_BUILDER_SHA": "${{ github.sha }}",
+                                  "LPTOOLS_BUILDER_BRANCH": "${{ github.ref_name }}",
+                                  "LPTOOLS_BUILDER_REF": "git@github.com:${{ github.repository }}.git",
+                                  "PYTHONUNBUFFERED": "1"}, "steps": steps}},
+    }
+
+
+def main():
+    target = ROOT / ".github/workflows/lp-upstream.yml"
+    header = ("# Generated by scripts/make-upstream-workflow.py; regenerate after embedded file changes.\n"
+              "# Official AOSP source; no patch payload, no historical writer build.\n")
+    target.write_text(header + yaml.dump(workflow(), Dumper=shared.Dumper, sort_keys=False, width=120),
+                      encoding="utf-8", newline="\n")
+    print("wrote %s" % target)
+
+
+if __name__ == "__main__":
+    main()

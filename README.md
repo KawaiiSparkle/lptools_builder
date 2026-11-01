@@ -301,7 +301,23 @@ Release 说明里的三张表都是机器从产物里读出来的，没有手写
 按 tag 构建时允许分支字段为空，不把 repo 的本地 `default` 分支当作上游分支。
 这些来源记录不包含完整环境，也不能证明重建会得到逐字节相同的二进制。
 
-### 4.6 latest-release 跨版本兼容性验证
+### 4.6 原版 AOSP 云端编译
+
+独立工作流 **LP upstream build (unpatched)** 在 `build/upstream` 分支推送时运行，
+也支持手动指定 `aosp_ref`（默认 `android-latest-release`）。它从 Google 官方 manifest
+同步源码，用原版 Soong 编译 Linux x86_64 的 LP 和 sparse 工具；不加载 `patches/`，
+也不运行历史 writer 构建和跨版本矩阵。新增的 `lptools_host` 产品配置只选择 host
+安装目标，没有修改上游 C/C++ 或 Android.bp。
+
+流程为同步、确认各上游项目干净、编译、打包目录内的工具往返验证、保存来源记录。
+Artifact **lp-upstream-linux-x86_64** 包含 bundle、SHA-256 和来源记录；失败时也尝试
+保存实际拉取的 branch、manifest 提交、各项目提交和源码状态。只有云端实际通过
+才代表本次 ref 编译成功。其他 target 的适配以这个原版构建结果为基线另行推进。
+
+[scripts/make-upstream-workflow.py](scripts/make-upstream-workflow.py) 生成此入口，
+复用脚本嵌入机制；修改嵌入的脚本后须重新生成。
+
+### 4.7 latest-release 跨版本兼容性验证（独立研究入口）
 
 独立工作流 **LP latest-release compatibility** 在 `compat/latest-release` 分支推送时运行，
 也支持手动指定 `latest_ref`（默认 `android-latest-release`）。它先编译当前源码的 Linux

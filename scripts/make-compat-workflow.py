@@ -34,10 +34,11 @@ def string_repr(dumper, data):
 Dumper.add_representer(str, string_repr)
 
 
-def workflow():
+def payload_steps(files):
+    """Embed exact build scripts without a repository download or runner SSH key."""
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w") as archive:
-        for name in sorted(FILES):
+        for name in sorted(files):
             data = (ROOT / name).read_bytes()
             item = tarfile.TarInfo(name)
             item.size, item.mtime = len(data), 0
@@ -68,8 +69,13 @@ with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
         dest.chmod(item.mode)
 PY
 '''.replace("DIGEST", hashlib.sha256(raw).hexdigest())
+    steps.append({"name": "Verify and unpack build scripts", "shell": "bash", "run": unpack})
+    return steps
+
+
+def workflow():
+    steps = payload_steps(FILES)
     steps += [
-        {"name": "Verify and unpack build scripts", "shell": "bash", "run": unpack},
         {"name": "Check compatibility harness regressions", "shell": "bash", "run": '''set -euo pipefail
 python3 -B tests/test-lp-compatibility.py
 python3 -B tests/test-historical-writers.py
